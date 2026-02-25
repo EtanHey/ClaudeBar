@@ -170,10 +170,12 @@ jobs:
             exit 1
           fi
 
-          # Fetch the MAC_APP_STORE profile and extract its content
+          # Fetch all profiles for this bundle ID.
+          # Note: asc ignores --type when --bundle-id-id is provided, so we filter in jq.
           PROFILE_JSON=$(asc profiles list --bundle-id-id "$BUNDLE_ID_ID" --type MAC_APP_STORE)
-          PROFILE_CONTENT=$(echo "$PROFILE_JSON" | jq -r '.data[0].profileContent')
-          PP_NAME=$(echo "$PROFILE_JSON" | jq -r '.data[0].name')
+          PROFILE_CONTENT=$(echo "$PROFILE_JSON" | jq -r '[.data[] | select(.profileType == "MAC_APP_STORE")][0].profileContent')
+          PP_NAME=$(echo "$PROFILE_JSON" | jq -r '[.data[] | select(.profileType == "MAC_APP_STORE")][0].name')
+          PP_UUID=$(echo "$PROFILE_JSON" | jq -r '[.data[] | select(.profileType == "MAC_APP_STORE")][0].uuid')
 
           if [ -z "$PROFILE_CONTENT" ] || [ "$PROFILE_CONTENT" = "null" ]; then
             echo "Error: No MAC_APP_STORE profile found for $BUNDLE_ID"
@@ -182,11 +184,24 @@ jobs:
             exit 1
           fi
 
-          # Decode and install the profile
-          # printf '%s' avoids the trailing newline echo adds, which breaks macOS base64 -D
+          # Decode and install the profile.
+          # Strip whitespace from the base64 content (normalises multi-line output from the API),
+          # write to a temp file, then use file-based decoding to avoid macOS base64 stdin quirks.
           PP_PATH="$RUNNER_TEMP/mas.provisionprofile"
-          printf '%s' "$PROFILE_CONTENT" | base64 -D > "$PP_PATH"
-          PP_UUID=$(security cms -D -i "$PP_PATH" | /usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin)
+          printf '%s' "$PROFILE_CONTENT" | tr -d '[:space:]' > "$RUNNER_TEMP/mas-profile.b64"
+          base64 -D -i "$RUNNER_TEMP/mas-profile.b64" -o "$PP_PATH"
+          rm -f "$RUNNER_TEMP/mas-profile.b64"
+
+          if [ ! -s "$PP_PATH" ]; then
+            echo "Error: Provisioning profile decoded to empty file (content length: ${#PROFILE_CONTENT})"
+            exit 1
+          fi
+
+          # Use UUID from JSON if available; fall back to extracting from the decoded profile.
+          if [ -z "$PP_UUID" ] || [ "$PP_UUID" = "null" ]; then
+            PP_UUID=$(security cms -D -i "$PP_PATH" | /usr/libexec/PlistBuddy -c 'Print UUID' /dev/stdin)
+          fi
+
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           cp "$PP_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PP_UUID.provisionprofile"
 
