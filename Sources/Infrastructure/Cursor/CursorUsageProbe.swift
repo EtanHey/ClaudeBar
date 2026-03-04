@@ -214,6 +214,7 @@ public struct CursorUsageProbe: UsageProbe {
         var quotas: [UsageQuota] = []
 
         let membershipType = json["membershipType"] as? String ?? "unknown"
+        let limitType = json["limitType"] as? String ?? ""
 
         // Parse billing cycle dates for reset time
         var resetsAt: Date?
@@ -238,16 +239,28 @@ public struct CursorUsageProbe: UsageProbe {
             let used = Self.intValue(from: planUsage, key: "used") ?? 0
             let limit = Self.intValue(from: planUsage, key: "limit") ?? 0
 
-            if limit > 0 {
-                let percentRemaining = Double(limit - used) / Double(limit) * 100
-                let requestsText = "\(used)/\(limit) requests"
+            // Enterprise plans have limit == 0; fall back to breakdown.total
+            let breakdown = planUsage["breakdown"] as? [String: Any]
+            let breakdownTotal = breakdown.flatMap { Self.intValue(from: $0, key: "total") } ?? 0
+            let effectiveLimit = limit > 0 ? limit : breakdownTotal
+
+            if effectiveLimit > 0 {
+                // When limit field is 0, derive used from totalPercentUsed (enterprise API quirk)
+                let effectiveUsed: Int
+                if limit == 0, let totalPercentUsed = planUsage["totalPercentUsed"] as? Double {
+                    effectiveUsed = Int((totalPercentUsed * Double(effectiveLimit) / 100).rounded())
+                } else {
+                    effectiveUsed = used
+                }
+
+                let percentRemaining = Double(effectiveLimit - effectiveUsed) / Double(effectiveLimit) * 100
 
                 quotas.append(UsageQuota(
                     percentRemaining: max(0, percentRemaining),
                     quotaType: .timeLimit("Monthly"),
                     providerId: "cursor",
                     resetsAt: resetsAt,
-                    resetText: requestsText
+                    resetText: "\(effectiveUsed)/\(effectiveLimit) requests"
                 ))
             }
         }
@@ -266,6 +279,26 @@ public struct CursorUsageProbe: UsageProbe {
                     providerId: "cursor",
                     resetsAt: resetsAt,
                     resetText: "\(used)/\(limit) on-demand"
+                ))
+            }
+        }
+
+        // Parse team usage for enterprise plans (limitType == "team")
+        if limitType == "team",
+           let teamUsage = json["teamUsage"] as? [String: Any],
+           let teamOnDemand = teamUsage["onDemand"] as? [String: Any],
+           let teamEnabled = teamOnDemand["enabled"] as? Bool, teamEnabled {
+            let used = Self.intValue(from: teamOnDemand, key: "used") ?? 0
+            let limit = Self.intValue(from: teamOnDemand, key: "limit") ?? 0
+
+            if limit > 0 {
+                let percentRemaining = Double(limit - used) / Double(limit) * 100
+                quotas.append(UsageQuota(
+                    percentRemaining: max(0, percentRemaining),
+                    quotaType: .timeLimit("Team"),
+                    providerId: "cursor",
+                    resetsAt: resetsAt,
+                    resetText: "\(used)/\(limit) team credits"
                 ))
             }
         }
@@ -291,6 +324,7 @@ public struct CursorUsageProbe: UsageProbe {
         case "business": .custom("BUSINESS")
         case "free": .custom("FREE")
         case "ultra": .custom("ULTRA")
+        case "enterprise": .custom("ENTERPRISE")
         default: membershipType.isEmpty ? nil : .custom(membershipType.uppercased())
         }
 

@@ -223,6 +223,108 @@ struct CursorUsageProbeParsingTests {
         #expect(abs(snapshot.quotas[0].percentRemaining - 40.0) < 0.1)
     }
 
+    // MARK: - Enterprise Plan
+
+    @Test
+    func `parse enterprise plan with team limitType`() throws {
+        let json = """
+        {
+            "billingCycleStart": "2026-03-01T00:00:00.000Z",
+            "billingCycleEnd": "2026-04-01T00:00:00.000Z",
+            "membershipType": "enterprise",
+            "limitType": "team",
+            "isUnlimited": false,
+            "autoModelSelectedDisplayMessage": "You've used 7% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 7% of your included API usage",
+            "individualUsage": {
+                "plan": {
+                    "enabled": true,
+                    "used": 0,
+                    "limit": 0,
+                    "remaining": 0,
+                    "breakdown": {
+                        "included": 0,
+                        "bonus": 300,
+                        "total": 300
+                    },
+                    "autoPercentUsed": 0,
+                    "apiPercentUsed": 6.9,
+                    "totalPercentUsed": 6.9
+                },
+                "onDemand": {
+                    "enabled": false,
+                    "used": 0,
+                    "limit": 0,
+                    "remaining": 0
+                }
+            },
+            "teamUsage": {
+                "onDemand": {
+                    "enabled": true,
+                    "used": 0,
+                    "limit": 10000,
+                    "remaining": 10000
+                }
+            }
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try CursorUsageProbe.parseUsageSummary(json)
+
+        #expect(snapshot.providerId == "cursor")
+        #expect(snapshot.accountTier == .custom("ENTERPRISE"))
+
+        // Should have individual plan quota (from breakdown.total) + team quota
+        #expect(snapshot.quotas.count == 2)
+
+        let individualQuota = snapshot.quotas.first { $0.quotaType == .timeLimit("Monthly") }
+        #expect(individualQuota != nil)
+        // 6.9% used of 300 -> ~93.1% remaining
+        #expect(abs(individualQuota!.percentRemaining - 93.1) < 0.5)
+
+        let teamQuota = snapshot.quotas.first { $0.quotaType == .timeLimit("Team") }
+        #expect(teamQuota != nil)
+        #expect(teamQuota!.percentRemaining == 100.0)
+        #expect(teamQuota!.resetText == "0/10000 team credits")
+    }
+
+    @Test
+    func `parse enterprise plan individual usage falls back to breakdown total`() throws {
+        let json = """
+        {
+            "membershipType": "enterprise",
+            "limitType": "team",
+            "isUnlimited": false,
+            "individualUsage": {
+                "plan": {
+                    "enabled": true,
+                    "used": 0,
+                    "limit": 0,
+                    "remaining": 0,
+                    "breakdown": {
+                        "included": 0,
+                        "bonus": 184,
+                        "total": 184
+                    },
+                    "totalPercentUsed": 50.0
+                },
+                "onDemand": { "enabled": false, "used": 0, "limit": 0, "remaining": 0 }
+            },
+            "teamUsage": {
+                "onDemand": { "enabled": false, "used": 0, "limit": 0, "remaining": 0 }
+            }
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try CursorUsageProbe.parseUsageSummary(json)
+
+        #expect(snapshot.quotas.count == 1)
+        let quota = snapshot.quotas[0]
+        #expect(quota.quotaType == .timeLimit("Monthly"))
+        // 50% used -> 50% remaining
+        #expect(abs(quota.percentRemaining - 50.0) < 0.5)
+    }
+
     // MARK: - Error Cases
 
     @Test
