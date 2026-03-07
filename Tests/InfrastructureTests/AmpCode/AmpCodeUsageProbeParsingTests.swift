@@ -43,7 +43,7 @@ struct AmpCodeUsageProbeParsingTests {
         let snapshot = try AmpCodeUsageProbe.parse(text)
 
         // Then - $17.59/$20 = 87.95%
-        let freeQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Amp Free") }
+        let freeQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Free") }
         #expect(freeQuota != nil)
         #expect(freeQuota!.percentRemaining == 87.95)
     }
@@ -69,7 +69,7 @@ struct AmpCodeUsageProbeParsingTests {
         let snapshot = try AmpCodeUsageProbe.parse(text)
 
         // Then - $0/$20 = 0%
-        let freeQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Amp Free") }
+        let freeQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Free") }
         #expect(freeQuota != nil)
         #expect(freeQuota!.percentRemaining == 0.0)
     }
@@ -84,8 +84,8 @@ struct AmpCodeUsageProbeParsingTests {
 
         // Then - both quotas parsed
         #expect(snapshot.quotas.count == 2)
-        let freeQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Amp Free") }
-        let creditsQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Individual credits") }
+        let freeQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Free") }
+        let creditsQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Individual") }
         #expect(freeQuota != nil)
         #expect(creditsQuota != nil)
     }
@@ -99,7 +99,7 @@ struct AmpCodeUsageProbeParsingTests {
         let snapshot = try AmpCodeUsageProbe.parse(text)
 
         // Then - $50 remaining with no cap
-        let creditsQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Individual credits") }
+        let creditsQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Individual") }
         #expect(creditsQuota?.dollarRemaining == 50)
         #expect(creditsQuota?.percentRemaining == 100)
     }
@@ -113,7 +113,7 @@ struct AmpCodeUsageProbeParsingTests {
         let snapshot = try AmpCodeUsageProbe.parse(text)
 
         // Then
-        let creditsQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Individual credits") }
+        let creditsQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Individual") }
         #expect(creditsQuota?.dollarRemaining == 0)
         #expect(creditsQuota?.percentRemaining == 100)
     }
@@ -127,7 +127,7 @@ struct AmpCodeUsageProbeParsingTests {
         let snapshot = try AmpCodeUsageProbe.parse(text)
 
         // Then - shows $remaining/$total like Copilot shows x/y requests
-        let freeQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Amp Free") }
+        let freeQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Free") }
         #expect(freeQuota?.resetText == "$17.59/$20.00")
     }
 
@@ -140,7 +140,7 @@ struct AmpCodeUsageProbeParsingTests {
         let snapshot = try AmpCodeUsageProbe.parse(text)
 
         // Then
-        let freeQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Amp Free") }
+        let freeQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Free") }
         #expect(freeQuota?.resetText == "$0.00/$20.00")
     }
 
@@ -153,7 +153,7 @@ struct AmpCodeUsageProbeParsingTests {
         let snapshot = try AmpCodeUsageProbe.parse(text)
 
         // Then
-        let creditsQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Individual credits") }
+        let creditsQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Individual") }
         #expect(creditsQuota?.resetText == nil)
     }
 
@@ -166,7 +166,7 @@ struct AmpCodeUsageProbeParsingTests {
         let snapshot = try AmpCodeUsageProbe.parse(text)
 
         // Then - percentage-based quota should not have dollarRemaining
-        let freeQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Amp Free") }
+        let freeQuota = snapshot.quotas.first { $0.quotaType == .modelSpecific("Free") }
         #expect(freeQuota?.dollarRemaining == nil)
     }
 
@@ -180,7 +180,7 @@ struct AmpCodeUsageProbeParsingTests {
 
         // Then
         #expect(snapshot.quotas.count == 1)
-        #expect(snapshot.quotas[0].quotaType == .modelSpecific("Individual credits"))
+        #expect(snapshot.quotas[0].quotaType == .modelSpecific("Individual"))
         #expect(snapshot.quotas[0].dollarRemaining == 50)
     }
     @Test
@@ -193,7 +193,7 @@ struct AmpCodeUsageProbeParsingTests {
 
         // Then
         if case .modelSpecific(let name) = snapshot.quotas[0].quotaType {
-            #expect(name == "Amp Free")
+            #expect(name == "Free")
         } else {
             Issue.record("Expected modelSpecific quota type")
         }
