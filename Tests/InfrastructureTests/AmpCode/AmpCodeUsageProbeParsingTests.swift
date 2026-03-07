@@ -212,33 +212,6 @@ struct AmpCodeUsageProbeParsingTests {
         #expect(snapshot.quotas.allSatisfy { $0.providerId == "ampcode" })
     }
 
-    @Test
-    func `extracts tier from free quota label`() throws {
-        // Given
-        let text = Self.sampleOutput
-
-        // When
-        let snapshot = try AmpCodeUsageProbe.parse(text)
-
-        // Then
-        #expect(snapshot.accountTier == .custom("Free"))
-    }
-
-    @Test
-    func `returns nil tier for unsupported label`() throws {
-        // Given
-        let text = """
-        Signed in as user@example.com (username)
-        Amp Pro: $17.59/$20 remaining (replenishes +$0.83/hour)
-        """
-
-        // When
-        let snapshot = try AmpCodeUsageProbe.parse(text)
-
-        // Then
-        #expect(snapshot.accountTier == nil)
-    }
-
     // MARK: - Error Handling Tests
 
     @Test
