@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.4.46] - 2026-03-12
+
 ### Added
 - **Alibaba Coding Plan Provider**: Monitor your Alibaba Coding Plan usage quotas directly from the menu bar. Supports three quota windows — 5-hour session, weekly, and monthly — with reset times and progress tracking. Authenticate via API key or browser cookies (auto-extract with SweetCookieKit or paste manually). Supports both International (`modelstudio.console.alibabacloud.com`) and China Mainland (`bailian.console.aliyun.com`) regions.
 
@@ -598,7 +602,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Menu bar interface with quota display
 - Automatic refresh every 5 minutes
 
-[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.4.45...HEAD
+[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.4.46...HEAD
+[0.4.46]: https://github.com/tddworks/ClaudeBar/compare/v0.4.45...v0.4.46
 [0.4.45]: https://github.com/tddworks/ClaudeBar/compare/v0.4.44...v0.4.45
 [0.4.44]: https://github.com/tddworks/ClaudeBar/compare/v0.4.43...v0.4.44
 [0.4.43]: https://github.com/tddworks/ClaudeBar/compare/v0.4.43...v0.4.43
