@@ -3,7 +3,7 @@ import Domain
 
 /// UserDefaults-based implementation of ProviderSettingsRepository and its sub-protocols.
 /// Persists provider settings like isEnabled state and provider-specific configuration.
-public final class UserDefaultsProviderSettingsRepository: ZaiSettingsRepository, CopilotSettingsRepository, BedrockSettingsRepository, ClaudeSettingsRepository, CodexSettingsRepository, KimiSettingsRepository, MiniMaxSettingsRepository, HookSettingsRepository, @unchecked Sendable {
+public final class UserDefaultsProviderSettingsRepository: ZaiSettingsRepository, CopilotSettingsRepository, BedrockSettingsRepository, ClaudeSettingsRepository, CodexSettingsRepository, KimiSettingsRepository, MiniMaxSettingsRepository, AlibabaSettingsRepository, HookSettingsRepository, @unchecked Sendable {
     /// Shared singleton instance
     public static let shared = UserDefaultsProviderSettingsRepository()
 
@@ -288,6 +288,54 @@ public final class UserDefaultsProviderSettingsRepository: ZaiSettingsRepository
         userDefaults.object(forKey: Keys.minimaxiApiKey) != nil
     }
 
+    // MARK: - AlibabaSettingsRepository
+
+    public func alibabaRegion() -> AlibabaRegion {
+        guard let rawValue = userDefaults.string(forKey: Keys.alibabaRegion) else {
+            return .international
+        }
+        return AlibabaRegion(rawValue: rawValue) ?? .international
+    }
+
+    public func setAlibabaRegion(_ region: AlibabaRegion) {
+        userDefaults.set(region.rawValue, forKey: Keys.alibabaRegion)
+    }
+
+    public func alibabaCookieSource() -> AlibabaCookieSource {
+        guard let rawValue = userDefaults.string(forKey: Keys.alibabaCookieSource) else {
+            return .auto
+        }
+        return AlibabaCookieSource(rawValue: rawValue) ?? .auto
+    }
+
+    public func setAlibabaCookieSource(_ source: AlibabaCookieSource) {
+        userDefaults.set(source.rawValue, forKey: Keys.alibabaCookieSource)
+    }
+
+    public func saveAlibabaManualCookie(_ cookie: String) {
+        userDefaults.set(cookie, forKey: Keys.alibabaManualCookie)
+    }
+
+    public func getAlibabaManualCookie() -> String? {
+        userDefaults.string(forKey: Keys.alibabaManualCookie)
+    }
+
+    public func saveAlibabaApiKey(_ key: String) {
+        userDefaults.set(key, forKey: Keys.alibabaApiKey)
+    }
+
+    public func getAlibabaApiKey() -> String? {
+        userDefaults.string(forKey: Keys.alibabaApiKey)
+    }
+
+    public func deleteAlibabaApiKey() {
+        userDefaults.removeObject(forKey: Keys.alibabaApiKey)
+    }
+
+    public func hasAlibabaApiKey() -> Bool {
+        userDefaults.object(forKey: Keys.alibabaApiKey) != nil
+    }
+
     // MARK: - HookSettingsRepository
 
     public func isHookEnabled() -> Bool {
@@ -341,6 +389,11 @@ public final class UserDefaultsProviderSettingsRepository: ZaiSettingsRepository
         static let minimaxRegion = "providerConfig.minimaxRegion"
         static let minimaxiAuthEnvVar = "providerConfig.minimaxiAuthEnvVar"
         static let minimaxiApiKey = "com.claudebar.credentials.minimaxi-api-key"
+        // Alibaba settings
+        static let alibabaRegion = "providerConfig.alibabaRegion"
+        static let alibabaCookieSource = "providerConfig.alibabaCookieSource"
+        static let alibabaManualCookie = "com.claudebar.credentials.alibaba-manual-cookie"
+        static let alibabaApiKey = "com.claudebar.credentials.alibaba-api-key"
         // Credentials (kept compatible with old UserDefaultsCredentialRepository keys)
         static let githubToken = "com.claudebar.credentials.github-copilot-token"
         static let githubUsername = "com.claudebar.credentials.github-username"
