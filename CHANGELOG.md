@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.4.45] - 2026-03-12
+
 ### Added
 - **Daily Usage Cards Toggle**: New setting to show/hide daily usage report cards (API Cost, Token Usage, Working Time) in the menu bar. Useful for users who don't use the Claude API or prefer a cleaner view. Toggle in Settings → Display.
 
@@ -587,7 +591,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Menu bar interface with quota display
 - Automatic refresh every 5 minutes
 
-[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.4.44...HEAD
+[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.4.45...HEAD
+[0.4.45]: https://github.com/tddworks/ClaudeBar/compare/v0.4.44...v0.4.45
 [0.4.44]: https://github.com/tddworks/ClaudeBar/compare/v0.4.43...v0.4.44
 [0.4.43]: https://github.com/tddworks/ClaudeBar/compare/v0.4.43...v0.4.43
 [0.4.43]: https://github.com/tddworks/ClaudeBar/compare/v0.4.42...v0.4.43
