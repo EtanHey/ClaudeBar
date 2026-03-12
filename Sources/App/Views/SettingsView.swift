@@ -218,15 +218,15 @@ struct SettingsContentView: View {
             if settings.claudeApiBudget > 0 {
                 budgetInput = String(describing: settings.claudeApiBudget)
             }
-            zaiConfigPathInput = UserDefaultsProviderSettingsRepository.shared.zaiConfigPath()
-            glmAuthEnvVarInput = UserDefaultsProviderSettingsRepository.shared.glmAuthEnvVar()
-            copilotProbeMode = UserDefaultsProviderSettingsRepository.shared.copilotProbeMode()
-            copilotAuthEnvVarInput = UserDefaultsProviderSettingsRepository.shared.copilotAuthEnvVar()
-            copilotMonthlyLimit = UserDefaultsProviderSettingsRepository.shared.copilotMonthlyLimit() ?? 50
-            copilotManualOverrideEnabled = UserDefaultsProviderSettingsRepository.shared.copilotManualOverrideEnabled()
-            copilotApiReturnedEmpty = UserDefaultsProviderSettingsRepository.shared.copilotApiReturnedEmpty()
-            if let value = UserDefaultsProviderSettingsRepository.shared.copilotManualUsageValue() {
-                let isPercent = UserDefaultsProviderSettingsRepository.shared.copilotManualUsageIsPercent()
+            zaiConfigPathInput = settings.zai.zaiConfigPath()
+            glmAuthEnvVarInput = settings.zai.glmAuthEnvVar()
+            copilotProbeMode = settings.copilot.copilotProbeMode()
+            copilotAuthEnvVarInput = settings.copilot.copilotAuthEnvVar()
+            copilotMonthlyLimit = settings.copilot.copilotMonthlyLimit() ?? 50
+            copilotManualOverrideEnabled = settings.copilot.copilotManualOverrideEnabled()
+            copilotApiReturnedEmpty = settings.copilot.copilotApiReturnedEmpty()
+            if let value = settings.copilot.copilotManualUsageValue() {
+                let isPercent = settings.copilot.copilotManualUsageIsPercent()
                 if isPercent {
                     copilotManualUsageInput = String(Int(value)) + "%"
                 } else {
@@ -234,27 +234,19 @@ struct SettingsContentView: View {
                 }
             }
 
-            // Initialize Claude settings
-            claudeProbeMode = UserDefaultsProviderSettingsRepository.shared.claudeProbeMode()
+            claudeProbeMode = settings.claude.claudeProbeMode()
+            codexProbeMode = settings.codex.codexProbeMode()
+            kimiProbeMode = settings.kimi.kimiProbeMode()
 
-            // Initialize Codex settings
-            codexProbeMode = UserDefaultsProviderSettingsRepository.shared.codexProbeMode()
+            miniMaxRegion = settings.minimax.minimaxRegion()
+            miniMaxAuthEnvVarInput = settings.minimax.minimaxAuthEnvVar()
 
-            // Initialize Kimi settings
-            kimiProbeMode = UserDefaultsProviderSettingsRepository.shared.kimiProbeMode()
-
-            // Initialize MiniMax settings
-            miniMaxRegion = UserDefaultsProviderSettingsRepository.shared.minimaxRegion()
-            miniMaxAuthEnvVarInput = UserDefaultsProviderSettingsRepository.shared.minimaxAuthEnvVar()
-
-            // Initialize Hook settings
-            hooksEnabled = UserDefaultsProviderSettingsRepository.shared.isHookEnabled()
+            hooksEnabled = settings.hook.isHookEnabled()
             hooksInstalled = HookInstaller.isInstalled()
 
-            // Initialize Bedrock settings
-            awsProfileNameInput = UserDefaultsProviderSettingsRepository.shared.awsProfileName()
-            bedrockRegionsInput = UserDefaultsProviderSettingsRepository.shared.bedrockRegions().joined(separator: ", ")
-            if let budget = UserDefaultsProviderSettingsRepository.shared.bedrockDailyBudget() {
+            awsProfileNameInput = settings.bedrock.awsProfileName()
+            bedrockRegionsInput = settings.bedrock.bedrockRegions().joined(separator: ", ")
+            if let budget = settings.bedrock.bedrockDailyBudget() {
                 bedrockDailyBudgetInput = String(describing: budget)
             }
         }
@@ -666,7 +658,7 @@ struct SettingsContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: claudeProbeMode) { _, newValue in
-                    UserDefaultsProviderSettingsRepository.shared.setClaudeProbeMode(newValue)
+                    settings.claude.setClaudeProbeMode(newValue)
                     // Optionally trigger a refresh when mode changes
                     Task {
                         await monitor.refresh(providerId: ProviderID.claude)
@@ -952,7 +944,7 @@ struct SettingsContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: codexProbeMode) { _, newValue in
-                    UserDefaultsProviderSettingsRepository.shared.setCodexProbeMode(newValue)
+                    settings.codex.setCodexProbeMode(newValue)
                     Task {
                         await monitor.refresh(providerId: ProviderID.codex)
                     }
@@ -1109,7 +1101,7 @@ struct SettingsContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: miniMaxRegion) { _, newValue in
-                    UserDefaultsProviderSettingsRepository.shared.setMinimaxRegion(newValue)
+                    settings.minimax.setMinimaxRegion(newValue)
                     Task {
                         await monitor.refresh(providerId: ProviderID.minimax)
                     }
@@ -1126,7 +1118,7 @@ struct SettingsContentView: View {
 
                     Spacer()
 
-                    if UserDefaultsProviderSettingsRepository.shared.hasMinimaxApiKey() {
+                    if settings.minimax.hasMinimaxApiKey() {
                         HStack(spacing: 3) {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 9))
@@ -1196,7 +1188,7 @@ struct SettingsContentView: View {
                             )
                     )
                     .onChange(of: miniMaxAuthEnvVarInput) { _, newValue in
-                        UserDefaultsProviderSettingsRepository.shared.setMinimaxAuthEnvVar(newValue)
+                        settings.minimax.setMinimaxAuthEnvVar(newValue)
                     }
             }
 
@@ -1267,9 +1259,9 @@ struct SettingsContentView: View {
             }
 
             // Delete API key
-            if UserDefaultsProviderSettingsRepository.shared.hasMinimaxApiKey() {
+            if settings.minimax.hasMinimaxApiKey() {
                 Button {
-                    UserDefaultsProviderSettingsRepository.shared.deleteMinimaxApiKey()
+                    settings.minimax.deleteMinimaxApiKey()
                     miniMaxApiKeyInput = ""
                     miniMaxTestResult = nil
                 } label: {
@@ -1372,7 +1364,7 @@ struct SettingsContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: kimiProbeMode) { _, newValue in
-                    UserDefaultsProviderSettingsRepository.shared.setKimiProbeMode(newValue)
+                    settings.kimi.setKimiProbeMode(newValue)
                     Task {
                         await monitor.refresh(providerId: ProviderID.kimi)
                     }
@@ -1508,7 +1500,7 @@ struct SettingsContentView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: copilotProbeMode) { _, newValue in
-                    UserDefaultsProviderSettingsRepository.shared.setCopilotProbeMode(newValue)
+                    settings.copilot.setCopilotProbeMode(newValue)
                     AppLog.probes.info("Copilot probe mode changed to \(newValue.rawValue)")
                     // Trigger a refresh when mode changes
                     Task {
@@ -1679,7 +1671,7 @@ struct SettingsContentView: View {
                             )
                     )
                     .onChange(of: copilotAuthEnvVarInput) { _, newValue in
-                        UserDefaultsProviderSettingsRepository.shared.setCopilotAuthEnvVar(newValue)
+                        settings.copilot.setCopilotAuthEnvVar(newValue)
                     }
             }
 
@@ -1712,7 +1704,7 @@ struct SettingsContentView: View {
                             )
                     )
                     .onChange(of: copilotMonthlyLimit) { _, newValue in
-                        UserDefaultsProviderSettingsRepository.shared.setCopilotMonthlyLimit(newValue)
+                        settings.copilot.setCopilotMonthlyLimit(newValue)
                     }
 
                     Text("Note: This is for premium requests (Copilot Chat with advanced models), not code completions")
@@ -1763,7 +1755,7 @@ struct SettingsContentView: View {
                     .foregroundStyle(theme.textPrimary)
                     .toggleStyle(.switch)
                     .onChange(of: copilotManualOverrideEnabled) { _, newValue in
-                        UserDefaultsProviderSettingsRepository.shared.setCopilotManualOverrideEnabled(newValue)
+                        settings.copilot.setCopilotManualOverrideEnabled(newValue)
                     }
 
                 // Manual usage input (shown when toggle is on)
@@ -1797,29 +1789,29 @@ struct SettingsContentView: View {
                                 if trimmed.isEmpty {
                                     // Clear value and error if input is empty
                                     copilotManualUsageInputError = nil
-                                    UserDefaultsProviderSettingsRepository.shared.setCopilotManualUsageValue(nil)
+                                    settings.copilot.setCopilotManualUsageValue(nil)
                                 } else if trimmed.hasSuffix("%") {
                                     // Percentage input (e.g., "198%")
                                     let numberPart = trimmed.dropLast()
                                     if let intValue = Int(numberPart), intValue >= 0 {
                                         // Valid percentage (integer >= 0)
                                         copilotManualUsageInputError = nil
-                                        UserDefaultsProviderSettingsRepository.shared.setCopilotManualUsageValue(Double(intValue))
-                                        UserDefaultsProviderSettingsRepository.shared.setCopilotManualUsageIsPercent(true)
+                                        settings.copilot.setCopilotManualUsageValue(Double(intValue))
+                                        settings.copilot.setCopilotManualUsageIsPercent(true)
                                     } else {
                                         // Invalid percentage
                                         copilotManualUsageInputError = "Enter a valid number (e.g., 198%)"
-                                        UserDefaultsProviderSettingsRepository.shared.setCopilotManualUsageValue(nil)
+                                        settings.copilot.setCopilotManualUsageValue(nil)
                                     }
                                 } else if let intValue = Int(trimmed), intValue >= 0 {
                                     // Valid request count (integer >= 0)
                                     copilotManualUsageInputError = nil
-                                    UserDefaultsProviderSettingsRepository.shared.setCopilotManualUsageValue(Double(intValue))
-                                    UserDefaultsProviderSettingsRepository.shared.setCopilotManualUsageIsPercent(false)
+                                    settings.copilot.setCopilotManualUsageValue(Double(intValue))
+                                    settings.copilot.setCopilotManualUsageIsPercent(false)
                                 } else {
                                     // Invalid request count
                                     copilotManualUsageInputError = "Enter a whole number or percentage"
-                                    UserDefaultsProviderSettingsRepository.shared.setCopilotManualUsageValue(nil)
+                                    settings.copilot.setCopilotManualUsageValue(nil)
                                 }
                             }
 
@@ -1980,7 +1972,7 @@ struct SettingsContentView: View {
                                 )
                         )
                         .onChange(of: zaiConfigPathInput) { _, newValue in
-                            UserDefaultsProviderSettingsRepository.shared.setZaiConfigPath(newValue)
+                            settings.zai.setZaiConfigPath(newValue)
                         }
                 }
 
@@ -2004,7 +1996,7 @@ struct SettingsContentView: View {
                                 )
                         )
                         .onChange(of: glmAuthEnvVarInput) { _, newValue in
-                            UserDefaultsProviderSettingsRepository.shared.setGlmAuthEnvVar(newValue)
+                            settings.zai.setGlmAuthEnvVar(newValue)
                         }
                 }
 
@@ -2102,7 +2094,7 @@ struct SettingsContentView: View {
                                 )
                         )
                         .onChange(of: awsProfileNameInput) { _, newValue in
-                            UserDefaultsProviderSettingsRepository.shared.setAWSProfileName(newValue)
+                            settings.bedrock.setAWSProfileName(newValue)
                         }
                 }
 
@@ -2128,7 +2120,7 @@ struct SettingsContentView: View {
                         )
                         .onChange(of: bedrockRegionsInput) { _, newValue in
                             let regions = newValue.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-                            UserDefaultsProviderSettingsRepository.shared.setBedrockRegions(regions)
+                            settings.bedrock.setBedrockRegions(regions)
                         }
                 }
 
@@ -2159,9 +2151,9 @@ struct SettingsContentView: View {
                             )
                             .onChange(of: bedrockDailyBudgetInput) { _, newValue in
                                 if newValue.isEmpty {
-                                    UserDefaultsProviderSettingsRepository.shared.setBedrockDailyBudget(nil)
+                                    settings.bedrock.setBedrockDailyBudget(nil)
                                 } else if let value = Decimal(string: newValue) {
-                                    UserDefaultsProviderSettingsRepository.shared.setBedrockDailyBudget(value)
+                                    settings.bedrock.setBedrockDailyBudget(value)
                                 }
                             }
                     }
@@ -2850,7 +2842,7 @@ struct SettingsContentView: View {
                         } else {
                             try HookInstaller.uninstall()
                         }
-                        UserDefaultsProviderSettingsRepository.shared.setHookEnabled(newValue)
+                        settings.hook.setHookEnabled(newValue)
                         hooksInstalled = HookInstaller.isInstalled()
                         // Notify app to start/stop hook server
                         NotificationCenter.default.post(
@@ -2926,7 +2918,7 @@ struct SettingsContentView: View {
         copilotTestResult = nil
 
         // Save current inputs
-        UserDefaultsProviderSettingsRepository.shared.setCopilotAuthEnvVar(copilotAuthEnvVarInput)
+        settings.copilot.setCopilotAuthEnvVar(copilotAuthEnvVarInput)
         if !copilotTokenInput.isEmpty {
             AppLog.credentials.info("Saving Copilot token for connection test")
             copilotProvider?.saveToken(copilotTokenInput)
@@ -2947,7 +2939,7 @@ struct SettingsContentView: View {
         }
 
         // Refresh state that may have been updated by the probe
-        copilotApiReturnedEmpty = UserDefaultsProviderSettingsRepository.shared.copilotApiReturnedEmpty()
+        copilotApiReturnedEmpty = settings.copilot.copilotApiReturnedEmpty()
         isTestingCopilot = false
     }
 
@@ -2956,10 +2948,10 @@ struct SettingsContentView: View {
         miniMaxTestResult = nil
 
         // Save current inputs
-        UserDefaultsProviderSettingsRepository.shared.setMinimaxAuthEnvVar(miniMaxAuthEnvVarInput)
+        settings.minimax.setMinimaxAuthEnvVar(miniMaxAuthEnvVarInput)
         if !miniMaxApiKeyInput.isEmpty {
             AppLog.credentials.info("Saving MiniMax API key for connection test")
-            UserDefaultsProviderSettingsRepository.shared.saveMinimaxApiKey(miniMaxApiKeyInput)
+            settings.minimax.saveMinimaxApiKey(miniMaxApiKeyInput)
             miniMaxApiKeyInput = ""
         }
 

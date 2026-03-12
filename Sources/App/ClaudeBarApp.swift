@@ -40,13 +40,12 @@ struct ClaudeBarApp: App {
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
         AppLog.ui.info("ClaudeBar v\(version) (\(build)) initializing...")
 
-        // Create the shared repository
-        // UserDefaultsProviderSettingsRepository implements all sub-protocols:
-        // - ProviderSettingsRepository (base)
-        // - ZaiSettingsRepository (Z.ai specific config)
-        // - CopilotSettingsRepository (Copilot specific config + credentials)
-        // - BedrockSettingsRepository (AWS Bedrock config)
-        let settingsRepository = UserDefaultsProviderSettingsRepository.shared
+        // Create the shared settings repository (JSON-backed: ~/.claudebar/settings.json)
+        // JSONSettingsRepository implements all sub-protocols:
+        // - AppSettingsRepository (app-level display/sync settings)
+        // - ProviderSettingsRepository + all provider sub-protocols
+        // - HookSettingsRepository
+        let settingsRepository = JSONSettingsRepository.shared
 
         // Create all providers with their probes (rich domain models)
         // Each provider manages its own isEnabled state (persisted via ProviderSettingsRepository)
