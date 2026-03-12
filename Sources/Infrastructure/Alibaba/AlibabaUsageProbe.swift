@@ -556,7 +556,7 @@ extension AlibabaRegion {
         }
     }
 
-    var dashboardURL: URL {
+    public var dashboardURL: URL {
         switch self {
         case .international:
             URL(string: "https://modelstudio.console.alibabacloud.com/ap-southeast-1/?tab=coding-plan#/efm/detail")!
