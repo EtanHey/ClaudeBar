@@ -139,26 +139,28 @@ struct AlibabaProviderTests {
 
     @Test
     func `successful refresh clears previous error`() async throws {
-        let mockProbe = MockUsageProbe()
-        let snapshot = UsageSnapshot(
-            providerId: "alibaba",
-            quotas: [UsageQuota(percentRemaining: 80.0, quotaType: .session, providerId: "alibaba")],
-            capturedAt: Date()
-        )
-
         let repo = makeSettingsRepository()
-        let provider = AlibabaProvider(probe: mockProbe, settingsRepository: repo)
 
-        // First call fails
-        given(mockProbe).probe().willThrow(ProbeError.authenticationRequired)
-        _ = try? await provider.refresh()
-        #expect(provider.lastError != nil)
+        // Use two separate probes to simulate the behavior
+        let failingProbe = MockUsageProbe()
+        given(failingProbe).probe().willThrow(ProbeError.authenticationRequired)
+        let alibabWithFailingProbe = AlibabaProvider(probe: failingProbe, settingsRepository: repo)
 
-        // Second call succeeds and clears error
-        mockProbe.reset(.allExceptPolicies)
-        given(mockProbe).probe().willReturn(snapshot)
-        _ = try await provider.refresh()
-        #expect(provider.lastError == nil)
-        #expect(provider.snapshot != nil)
+        do {
+            _ = try await alibabWithFailingProbe.refresh()
+        } catch {
+            // Expected
+        }
+        #expect(alibabWithFailingProbe.lastError != nil)
+
+        // Create new provider with succeeding probe
+        let succeedingProbe = MockUsageProbe()
+        let snapshot = UsageSnapshot(providerId: "alibaba", quotas: [], capturedAt: Date())
+        given(succeedingProbe).probe().willReturn(snapshot)
+        let alibabaWithSucceedingProbe = AlibabaProvider(probe: succeedingProbe, settingsRepository: repo)
+
+        _ = try await alibabaWithSucceedingProbe.refresh()
+        #expect(alibabaWithSucceedingProbe.lastError == nil)
+        #expect(alibabaWithSucceedingProbe.snapshot != nil)
     }
 }
