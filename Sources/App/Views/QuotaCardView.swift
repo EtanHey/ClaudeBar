@@ -12,9 +12,17 @@ struct QuotaCardView: View {
         settings.usageDisplayMode
     }
 
+    /// Status considering burn rate setting
+    private var effectiveStatus: QuotaStatus {
+        if settings.burnRateWarningEnabled {
+            return quota.paceAwareStatus(burnRateThreshold: settings.burnRateThreshold)
+        }
+        return quota.status
+    }
+
     /// Display color for dollar-based quotas based on dollar thresholds.
     private var dollarDisplayColor: Color {
-        guard let amount = quota.dollarRemaining else { return quota.status.displayColor }
+        guard let amount = quota.dollarRemaining else { return effectiveStatus.displayColor }
         let value = NSDecimalNumber(decimal: amount).doubleValue
         if value <= 5 { return .red }
         if value <= 20 { return .orange }
@@ -46,7 +54,7 @@ struct QuotaCardView: View {
                 Text("\(Int(quota.displayPercent(mode: effectiveDisplayMode)))%")
                     .font(.title2)
                     .fontWeight(.semibold)
-                    .foregroundStyle(effectiveDisplayMode == .pace ? quota.pace.displayColor : quota.status.displayColor)
+                    .foregroundStyle(effectiveDisplayMode == .pace ? quota.pace.displayColor : effectiveStatus.displayColor)
             }
 
             // Progress bar with pace tick
@@ -61,7 +69,7 @@ struct QuotaCardView: View {
 
                         // Fill (clamp width to 0-100%)
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(quota.status.displayColor)
+                            .fill(effectiveStatus.displayColor)
                             .frame(width: geometry.size.width * max(0, min(100, progressPercent)) / 100, height: 4)
                     }
                 }
