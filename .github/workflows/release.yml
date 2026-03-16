@@ -49,7 +49,7 @@ jobs:
 
       - name: Install Tuist
         run: |
-          curl -Ls https://github.com/tuist/tuist/releases/download/4.153.1/tuist.zip -o /tmp/tuist.zip
+          curl -Ls https://github.com/tuist/tuist/releases/download/4.130.2/tuist.zip -o /tmp/tuist.zip
           unzip -o /tmp/tuist.zip -d /usr/local/bin/
           tuist version
 
