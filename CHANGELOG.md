@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.50] - 2026-03-17
 
 ### Added
-- **Extensions System**: Raycast-style user extensions for custom provider monitoring. Drop a folder with a `manifest.json` and probe scripts into `~/.claudebar/extensions/` to add your own provider. Each extension defines composable sections (`quotaGrid`, `metricsRow`, `dailyUsage`, `costUsage`, `statusBanner`) with per-section probe commands and independent refresh intervals. Probe scripts can be any language (bash, python, swift) — just output JSON to stdout. Extensions auto-register as providers with custom branding (icon, colors) and appear in the provider pills alongside built-in providers. See `docs/features/extensions.md` for the full spec and example.
+- **Extensions System**: Raycast-style user extensions for custom provider monitoring. Drop a folder with a `manifest.json` and probe scripts into `~/.claudebar/extensions/` to add your own provider. Each extension defines composable sections (`quotaGrid`, `metricsRow`, `dailyUsage`, `costUsage`, `statusBanner`, `healthCheck`) with per-section probe commands and independent refresh intervals. Probe scripts can be any language (bash, python, swift) — just output JSON to stdout. Extensions auto-register as providers with custom branding (icon, colors) and appear in the provider pills alongside built-in providers. See `docs/features/extensions.md` for the full spec and example.
+- **Built-in Health Check for Extensions**: Extensions can now define a `healthCheck` section with a URL endpoint — no probe script needed. ClaudeBar pings the URL and renders Status (UP/DOWN with HTTP code) and Latency cards automatically. Configure via `"probe": { "builtIn": "healthCheck", "url": "https://..." }` in `manifest.json`.
 
 ---
 
