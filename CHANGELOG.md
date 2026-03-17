@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.4.49] - 2026-03-17
+
 ### Added
 - **Custom Web Card per Provider**: Configure a custom URL for any provider to display an embedded web page as an additional card below the quota cards. Useful for third-party dashboards like [claude.owo.nz](https://claude.owo.nz/). Set via Settings → Providers → Custom Card URL field. The page is rendered inline with WKWebView, scaled to fit the card, with an "open in browser" button.
 
@@ -619,7 +623,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Menu bar interface with quota display
 - Automatic refresh every 5 minutes
 
-[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.4.48...HEAD
+[Unreleased]: https://github.com/tddworks/ClaudeBar/compare/v0.4.49...HEAD
+[0.4.49]: https://github.com/tddworks/ClaudeBar/compare/v0.4.48...v0.4.49
 [0.4.48]: https://github.com/tddworks/ClaudeBar/compare/v0.4.47...v0.4.48
 [0.4.47]: https://github.com/tddworks/ClaudeBar/compare/v0.4.46...v0.4.47
 [0.4.46]: https://github.com/tddworks/ClaudeBar/compare/v0.4.45...v0.4.46
