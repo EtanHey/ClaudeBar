@@ -20,15 +20,25 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
     /// `user:inference` scope and cannot access quota data via `/usage`.
     static let envExclusions = ["CLAUDE_CODE_OAUTH_TOKEN"]
 
+    /// URL to `~/.claude.json` for reading account info (overridable for tests)
+    private let configURL: URL
+
     public init(
         claudeBinary: String = "claude",
         timeout: TimeInterval = 20.0,
-        cliExecutor: CLIExecutor? = nil
+        cliExecutor: CLIExecutor? = nil,
+        configURL: URL? = nil
     ) {
         self.claudeBinary = claudeBinary
         self.timeout = timeout
         self.cliExecutor = cliExecutor ?? DefaultCLIExecutor(environmentExclusions: Self.envExclusions)
         self.terminalRenderer = TerminalRenderer(cols: 160, rows: 50)
+        self.configURL = configURL ?? {
+            let configDir = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]
+                .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true) }
+            return (configDir ?? FileManager.default.homeDirectoryForCurrentUser)
+                .appendingPathComponent(".claude.json")
+        }()
     }
 
     public func isAvailable() async -> Bool {
@@ -101,16 +111,19 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
         let parseElapsed = CFAbsoluteTimeGetCurrent() - parseStart
         AppLog.probes.debug("Claude parsing took \(String(format: "%.3f", parseElapsed))s")
 
+        // Enrich with account info from config file if CLI didn't provide it
+        let enrichedSnapshot = enrichWithConfigAccountInfo(snapshot)
+
         let totalElapsed = CFAbsoluteTimeGetCurrent() - probeStart
-        AppLog.probes.info("Claude probe success: accountTier=\(snapshot.accountTier?.badgeText ?? "unknown"), quotas=\(snapshot.quotas.count) (total: \(String(format: "%.3f", totalElapsed))s)")
-        for quota in snapshot.quotas {
+        AppLog.probes.info("Claude probe success: accountTier=\(enrichedSnapshot.accountTier?.badgeText ?? "unknown"), quotas=\(enrichedSnapshot.quotas.count) (total: \(String(format: "%.3f", totalElapsed))s)")
+        for quota in enrichedSnapshot.quotas {
             AppLog.probes.info("  - \(quota.quotaType.displayName): \(Int(quota.percentRemaining))% remaining")
         }
-        if let cost = snapshot.costUsage {
+        if let cost = enrichedSnapshot.costUsage {
             AppLog.probes.info("  - Extra usage: \(cost.formattedCost) / \(cost.formattedBudget ?? "N/A")")
         }
 
-        return snapshot
+        return enrichedSnapshot
     }
 
     /// Probes using /cost command for API Usage Billing accounts
@@ -920,6 +933,68 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
             AppLog.probes.error("Failed to write trust to \(claudeJsonURL.path): \(error.localizedDescription)")
             return false
         }
+    }
+
+    // MARK: - Config File Account Info
+
+    /// Account information extracted from `~/.claude.json` → `oauthAccount`.
+    struct ConfigAccountInfo {
+        let email: String?
+        let displayName: String?
+        let organizationUuid: String?
+    }
+
+    /// Reads account info from `~/.claude.json` `oauthAccount` section.
+    /// This is a fallback for when the CLI `/usage` output doesn't include account info
+    /// (e.g., newer tabbed TUI format where account info is on the Status tab).
+    internal func readAccountInfoFromConfig(configURL: URL? = nil) -> ConfigAccountInfo? {
+        let url = configURL ?? self.configURL
+        guard FileManager.default.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let oauthAccount = root["oauthAccount"] as? [String: Any] else {
+            return nil
+        }
+
+        let email = oauthAccount["emailAddress"] as? String
+        let displayName = oauthAccount["displayName"] as? String
+        let orgUuid = oauthAccount["organizationUuid"] as? String
+
+        guard email != nil || displayName != nil else { return nil }
+
+        return ConfigAccountInfo(
+            email: email,
+            displayName: displayName,
+            organizationUuid: orgUuid
+        )
+    }
+
+    /// Enriches a snapshot with account info from config file when CLI output didn't provide it.
+    internal func enrichWithConfigAccountInfo(_ snapshot: UsageSnapshot) -> UsageSnapshot {
+        // Only enrich if CLI parsing didn't get account info
+        guard snapshot.accountEmail == nil, snapshot.accountOrganization == nil else {
+            return snapshot
+        }
+
+        guard let configInfo = readAccountInfoFromConfig() else {
+            return snapshot
+        }
+
+        AppLog.probes.info("Enriching snapshot with account info from ~/.claude.json (email=\(configInfo.email != nil ? "yes" : "no"), displayName=\(configInfo.displayName ?? "nil"))")
+
+        return UsageSnapshot(
+            providerId: snapshot.providerId,
+            quotas: snapshot.quotas,
+            capturedAt: snapshot.capturedAt,
+            accountEmail: configInfo.email,
+            accountOrganization: configInfo.displayName,
+            loginMethod: snapshot.loginMethod,
+            accountTier: snapshot.accountTier,
+            costUsage: snapshot.costUsage,
+            bedrockUsage: snapshot.bedrockUsage,
+            dailyUsageReport: snapshot.dailyUsageReport,
+            extensionMetrics: snapshot.extensionMetrics
+        )
     }
 
     internal func probeWorkingDirectory() -> URL {

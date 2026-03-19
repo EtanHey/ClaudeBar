@@ -290,6 +290,127 @@ struct ClaudeUsageProbeTests {
         #expect(snapshot.quotas.count >= 1)
     }
 
+    // MARK: - Account Info from Config File
+
+    @Test
+    func `readAccountInfoFromConfig extracts email and displayName from oauthAccount`() {
+        // Given - a .claude.json with oauthAccount section
+        let configJSON = """
+        {
+            "oauthAccount": {
+                "accountUuid": "abc-123",
+                "emailAddress": "user@example.com",
+                "organizationUuid": "org-456",
+                "displayName": "testuser",
+                "billingType": "stripe_subscription"
+            }
+        }
+        """
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try! FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let configFile = tempDir.appendingPathComponent(".claude.json")
+        try! configJSON.data(using: .utf8)!.write(to: configFile)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let probe = ClaudeUsageProbe()
+
+        // When
+        let accountInfo = probe.readAccountInfoFromConfig(configURL: configFile)
+
+        // Then
+        #expect(accountInfo?.email == "user@example.com")
+        #expect(accountInfo?.displayName == "testuser")
+        #expect(accountInfo?.organizationUuid == "org-456")
+    }
+
+    @Test
+    func `readAccountInfoFromConfig returns nil when file does not exist`() {
+        let probe = ClaudeUsageProbe()
+        let bogusURL = FileManager.default.temporaryDirectory.appendingPathComponent("nonexistent.json")
+
+        let result = probe.readAccountInfoFromConfig(configURL: bogusURL)
+
+        #expect(result == nil)
+    }
+
+    @Test
+    func `readAccountInfoFromConfig returns nil when oauthAccount is missing`() {
+        let configJSON = """
+        { "numStartups": 100 }
+        """
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try! FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let configFile = tempDir.appendingPathComponent(".claude.json")
+        try! configJSON.data(using: .utf8)!.write(to: configFile)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let probe = ClaudeUsageProbe()
+        let result = probe.readAccountInfoFromConfig(configURL: configFile)
+
+        #expect(result == nil)
+    }
+
+    @Test
+    func `probe enriches snapshot with config account info when CLI output has no header`() async throws {
+        // Given - new tabbed CLI output (no header line with account info)
+        let mockExecutor = MockCLIExecutor()
+
+        let tabbedUsageOutput = """
+          Status   Config   Usage
+
+        Current session
+        ▌                                                  1% used
+        Resets 12am (Asia/Shanghai)
+
+        Current week (all models)
+        ██████████████████████▌                            45% used
+        Resets 10:59am (Asia/Shanghai)
+
+        Extra usage
+        Extra usage not enabled • /extra-usage to enable
+
+        Esc to cancel
+        """
+
+        given(mockExecutor).locate(.any).willReturn("/usr/local/bin/claude")
+        given(mockExecutor).execute(
+            binary: .any,
+            args: .matching { $0.first == "/usage" },
+            input: .any,
+            timeout: .any,
+            workingDirectory: .any,
+            autoResponses: .any
+        ).willReturn(CLIResult(output: tabbedUsageOutput, exitCode: 0))
+
+        // Create a temp config file with account info
+        let configJSON = """
+        {
+            "oauthAccount": {
+                "emailAddress": "user@example.com",
+                "displayName": "testuser",
+                "organizationUuid": "org-456",
+                "billingType": "stripe_subscription"
+            }
+        }
+        """
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try! FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let configFile = tempDir.appendingPathComponent(".claude.json")
+        try! configJSON.data(using: .utf8)!.write(to: configFile)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let probe = ClaudeUsageProbe(cliExecutor: mockExecutor, configURL: configFile)
+
+        // When
+        let snapshot = try await probe.probe()
+
+        // Then - account info enriched from config file
+        #expect(snapshot.accountEmail == "user@example.com")
+        #expect(snapshot.accountOrganization == "testuser")
+        #expect(snapshot.quotas.count >= 1)
+        #expect(snapshot.sessionQuota?.percentRemaining == 99)
+    }
+
     // MARK: - Setup Token Environment Exclusion Tests
 
     @Test
