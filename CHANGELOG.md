@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Claude account info empty on CLI v2.1.79+**: The Claude CLI now uses a tabbed TUI where account info (email, organization) is on the Status tab, not the Usage tab. The probe now reads account info from `~/.claude.json` (`oauthAccount`) as a fallback, so the account card displays correctly without extra CLI calls.
 
+### Refactored
+- **Extract `ClaudeAccountInfoResolver`**: Account info resolution logic extracted from `ClaudeUsageProbe` into a dedicated `ClaudeAccountInfoResolver` that reads `~/.claude.json` → `oauthAccount`. Introduced `AccountInfo` domain value object with `displayName`, `isEmpty`, and `initialLetter` computed properties. Improves SRP and testability — the probe now delegates account identity resolution instead of owning it.
+
 ---
 
 ## [0.4.52] - 2026-03-18
