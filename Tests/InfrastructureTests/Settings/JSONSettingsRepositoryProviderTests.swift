@@ -346,4 +346,5 @@ struct JSONSettingsRepositoryProviderTests {
         repo.setMinimaxRegion(.international)
         #expect(repo.minimaxRegion() == .international)
     }
+
 }
