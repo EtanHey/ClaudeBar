@@ -100,6 +100,38 @@
   .group-status-badge.warning { background: rgba(250,184,90,0.12); color: var(--status-warning); }
   .group-status-badge.unreachable { background: rgba(120,120,135,0.15); color: var(--status-unreachable); }
 
+  /* Active indicator on group header */
+  .group-active-tag {
+    font-size: 7px; font-weight: 700; letter-spacing: 0.5px;
+    text-transform: uppercase; color: var(--status-healthy);
+    padding: 2px 5px; border-radius: 4px;
+    background: rgba(90,235,174,0.1);
+    border: 1px solid rgba(90,235,174,0.2);
+    display: flex; align-items: center; gap: 3px;
+  }
+  .group-active-dot {
+    width: 4px; height: 4px; border-radius: 50%;
+    background: var(--status-healthy);
+    animation: activePulse 2s ease-in-out infinite;
+  }
+  @keyframes activePulse {
+    0%, 100% { box-shadow: 0 0 2px rgba(90,235,174,0.3); }
+    50% { box-shadow: 0 0 6px rgba(90,235,174,0.7); }
+  }
+
+  /* Rotation info banner */
+  .rotation-banner {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px; border-radius: 8px;
+    background: linear-gradient(135deg, rgba(90,235,174,0.06), rgba(140,82,218,0.05));
+    border: 1px solid rgba(90,235,174,0.15);
+    font-size: 9px; color: var(--text-secondary);
+    opacity: 0; animation: cardIn 0.5s ease 0.65s forwards;
+  }
+  .rotation-banner .rotation-icon { font-size: 12px; flex-shrink: 0; }
+  .rotation-banner strong { color: var(--status-healthy); }
+  .rotation-banner .muted { color: var(--text-tertiary); }
+
   /* ── Compact stat cards ── */
   .compact-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .compact-card {
@@ -133,17 +165,6 @@
     letter-spacing: 0.5px; color: var(--status-unreachable);
     background: rgba(30,20,56,0.85); padding: 3px 8px; border-radius: 4px; white-space: nowrap;
   }
-
-  /* ── Worst-status callout ── */
-  .worst-status-callout {
-    display: flex; align-items: center; gap: 6px;
-    padding: 6px 10px; border-radius: 8px;
-    background: rgba(250,184,90,0.08); border: 1px solid rgba(250,184,90,0.2);
-    font-size: 9px; color: var(--text-secondary);
-    opacity: 0; animation: cardIn 0.5s ease 0.7s forwards;
-  }
-  .worst-status-callout .callout-icon { font-size: 12px; flex-shrink: 0; }
-  .worst-status-callout strong { color: var(--status-warning); }
 
   /* ── Back link ── */
   .back-link {
@@ -185,7 +206,7 @@
         <div class="provider-pill"><span class="pill-icon">◇</span> Amp</div>
       </div>
 
-      <!-- Account filter toggles -->
+      <!-- Account filter toggles — just identity + status, no duplicate numbers -->
       <div class="account-section-header">
         <span class="account-section-label">Accounts</span>
         <div class="account-filter-pills">
@@ -207,11 +228,12 @@
         </div>
       </div>
 
-      <!-- Account 1: Personal -->
+      <!-- Account 1: Personal — ACTIVE (single indicator, no duplicate %) -->
       <div class="account-group" data-account="Personal">
         <div class="account-group-header">
           <div class="group-avatar" style="background:rgba(140,82,218,0.25);color:rgb(180,140,240)">P</div>
           <span class="group-name">Personal</span>
+          <span class="group-active-tag"><span class="group-active-dot"></span> In Use</span>
           <span class="group-status-badge healthy">Healthy</span>
         </div>
         <div class="compact-stats">
@@ -228,7 +250,7 @@
         </div>
       </div>
 
-      <!-- Account 2: Work -->
+      <!-- Account 2: Work — not active -->
       <div class="account-group" data-account="Work">
         <div class="account-group-header">
           <div class="group-avatar" style="background:rgba(218,90,166,0.25);color:rgb(240,140,190)">W</div>
@@ -270,19 +292,20 @@
         </div>
       </div>
 
-      <!-- Worst-status callout -->
-      <div class="worst-status-callout">
-        <span class="callout-icon">⚠</span>
-        <span><strong>Work — Acme</strong> is at 18% Opus — causing aggregate Warning status</span>
+      <!-- Single status banner — rotation reason + worst account -->
+      <div class="rotation-banner">
+        <span class="rotation-icon">🔄</span>
+        <span>Rotated to <strong>Personal</strong> — Work dropped to 18% Opus</span>
       </div>
 
     </div>
   </div>
 
   <div class="annotation">
-    <strong>Parallel monitoring</strong> — All accounts shown simultaneously, not single-select.
-    Filter toggles hide/show accounts. <strong>Worst-status callout</strong> attributes the aggregate badge to a specific account.
-    <strong>Unreachable</strong> state shown for expired credentials.
+    <strong>Information hierarchy:</strong> Pills = identity + health dot (filter controls).
+    Group header = one <strong>"In Use"</strong> tag on the active account (pulsing dot).
+    Cards = the actual numbers (no duplication above).
+    <strong>Rotation banner</strong> = single line explaining why the active account changed, combining what was previously two separate callouts.
   </div>
 </div>
 
