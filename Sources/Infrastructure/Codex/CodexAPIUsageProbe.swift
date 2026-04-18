@@ -269,10 +269,12 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
             }
         }
 
+        quotas.append(contentsOf: parseAdditionalRateLimitQuotas(responseDict, nowSeconds: nowSeconds))
+
         // Parse credits
         var costUsage: CostUsage?
         let creditsHeader = readHeaderDouble(httpResponse, key: "x-codex-credits-balance")
-        let creditsBody = (responseDict["credits"] as? [String: Any])?["balance"] as? Double
+        let creditsBody = readDouble((responseDict["credits"] as? [String: Any])?["balance"])
         if let creditsRemaining = creditsHeader ?? creditsBody {
             let limit: Decimal = 1000
             let used = max(0, min(limit, limit - Decimal(creditsRemaining)))
@@ -299,7 +301,7 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
             providerId: "codex",
             quotas: quotas,
             capturedAt: Date(),
-            accountEmail: nil,
+            accountEmail: responseDict["email"] as? String,
             accountOrganization: nil,
             loginMethod: nil,
             accountTier: accountTier,
@@ -313,6 +315,62 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
         guard let value = response.value(forHTTPHeaderField: key) else { return nil }
         let n = Double(value)
         return n?.isFinite == true ? n : nil
+    }
+
+    private func readDouble(_ value: Any?) -> Double? {
+        switch value {
+        case let number as Double where number.isFinite:
+            return number
+        case let number as Int:
+            return Double(number)
+        case let text as String:
+            let number = Double(text)
+            return number?.isFinite == true ? number : nil
+        default:
+            return nil
+        }
+    }
+
+    private func parseAdditionalRateLimitQuotas(
+        _ responseDict: [String: Any],
+        nowSeconds: TimeInterval
+    ) -> [UsageQuota] {
+        guard let additionalRateLimits = responseDict["additional_rate_limits"] as? [[String: Any]] else {
+            return []
+        }
+
+        return additionalRateLimits.flatMap { limit -> [UsageQuota] in
+            guard let limitName = limit["limit_name"] as? String,
+                  let rateLimit = limit["rate_limit"] as? [String: Any] else {
+                return []
+            }
+
+            var quotas: [UsageQuota] = []
+
+            if let primaryWindow = rateLimit["primary_window"] as? [String: Any],
+               let usedPercent = readDouble(primaryWindow["used_percent"]) {
+                quotas.append(UsageQuota(
+                    percentRemaining: max(0, 100 - usedPercent),
+                    quotaType: .timeLimit("\(limitName) 5h"),
+                    providerId: "codex",
+                    resetsAt: resetsAtDate(nowSeconds: nowSeconds, window: primaryWindow),
+                    resetText: formatResetText(resetsAtDate(nowSeconds: nowSeconds, window: primaryWindow))
+                ))
+            }
+
+            if let secondaryWindow = rateLimit["secondary_window"] as? [String: Any],
+               let usedPercent = readDouble(secondaryWindow["used_percent"]) {
+                quotas.append(UsageQuota(
+                    percentRemaining: max(0, 100 - usedPercent),
+                    quotaType: .timeLimit("\(limitName) Weekly"),
+                    providerId: "codex",
+                    resetsAt: resetsAtDate(nowSeconds: nowSeconds, window: secondaryWindow),
+                    resetText: formatResetText(resetsAtDate(nowSeconds: nowSeconds, window: secondaryWindow))
+                ))
+            }
+
+            return quotas
+        }
     }
 
     private func resetsAtDate(nowSeconds: TimeInterval, window: [String: Any]?) -> Date? {

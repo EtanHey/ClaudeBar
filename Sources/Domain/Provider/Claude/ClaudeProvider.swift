@@ -1,12 +1,10 @@
 import Foundation
 import Observation
 
-/// Claude AI provider - a rich domain model.
-/// Observable class with its own state (isSyncing, snapshot, error).
-/// Supports dual probe modes: CLI (default) and API.
+/// Claude AI provider - rich domain model with optional multi-account support.
 @Observable
-public final class ClaudeProvider: AIProvider, @unchecked Sendable {
-    // MARK: - Identity (Protocol Requirement)
+public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked Sendable {
+    // MARK: - Identity
 
     public let id: String = "claude"
     public let name: String = "Claude"
@@ -20,36 +18,34 @@ public final class ClaudeProvider: AIProvider, @unchecked Sendable {
         URL(string: "https://status.anthropic.com")
     }
 
-    /// Whether the provider is enabled (persisted via settingsRepository)
     public var isEnabled: Bool {
         didSet {
             settingsRepository.setEnabled(isEnabled, forProvider: id)
         }
     }
 
-    // MARK: - State (Observable)
+    // MARK: - State
 
-    /// Whether the provider is currently syncing data
     public private(set) var isSyncing: Bool = false
-
-    /// The current usage snapshot (nil if never refreshed or unavailable)
     public private(set) var snapshot: UsageSnapshot?
-
-    /// The last error that occurred during refresh
     public private(set) var lastError: Error?
-
-    /// The current guest pass information (nil if never fetched)
     public private(set) var guestPass: ClaudePass?
-
-    /// Whether the provider is currently fetching passes
     public private(set) var isFetchingPasses: Bool = false
+
+    // MARK: - Multi Account
+
+    public private(set) var accounts: [ProviderAccount]
+    public private(set) var accountSnapshots: [String: UsageSnapshot] = [:]
+    public private(set) var primaryAccount: ProviderAccount?
+
+    public var activeAccount: ProviderAccount {
+        definition(for: activeAccountId)?.account ?? accounts[0]
+    }
 
     // MARK: - Probe Mode
 
-    /// The current probe mode (CLI or API)
     public var probeMode: ClaudeProbeMode {
         get {
-            // Only use ClaudeSettingsRepository if available
             if let claudeSettings = settingsRepository as? ClaudeSettingsRepository {
                 return claudeSettings.claudeProbeMode()
             }
@@ -64,60 +60,41 @@ public final class ClaudeProvider: AIProvider, @unchecked Sendable {
 
     // MARK: - Internal
 
-    /// The CLI probe for fetching usage data via `claude /usage`
-    private let cliProbe: any UsageProbe
-
-    /// The API probe for fetching usage data via HTTP API (optional)
-    private let apiProbe: (any UsageProbe)?
-
-    /// The probe used to fetch guest pass data
-    private let passProbe: (any ClaudePassProbing)?
-
-    /// The settings repository for persisting provider settings
+    private var accountDefinitions: [ClaudeAccountDefinition]
+    private var activeAccountId: String
+    private var primaryAccountId: String
     private let settingsRepository: any ProviderSettingsRepository
-
-    /// Optional analyzer for daily usage from JSONL session data
-    private let dailyUsageAnalyzer: (any DailyUsageAnalyzing)?
-
-    /// Returns the active probe based on current mode
-    private var activeProbe: any UsageProbe {
-        switch probeMode {
-        case .cli:
-            return cliProbe
-        case .api:
-            // Fall back to CLI if API probe not available
-            return apiProbe ?? cliProbe
-        }
-    }
+    private let onPrimaryAccountChange: ((ClaudeAccountDefinition) -> Void)?
+    private var accountWarmTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
-    /// Creates a Claude provider with CLI probe only (legacy initializer)
-    /// - Parameters:
-    ///   - probe: The CLI probe to use for fetching usage data
-    ///   - passProbe: The probe to use for fetching guest pass data (optional)
-    ///   - settingsRepository: The repository for persisting settings
     public init(
         probe: any UsageProbe,
         passProbe: (any ClaudePassProbing)? = nil,
         settingsRepository: any ProviderSettingsRepository,
         dailyUsageAnalyzer: (any DailyUsageAnalyzing)? = nil
     ) {
-        self.cliProbe = probe
-        self.apiProbe = nil
-        self.passProbe = passProbe
+        let configRootPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude", isDirectory: true)
+            .path
+        let definition = ClaudeAccountDefinition(
+            account: ProviderAccount(providerId: "claude", label: "Primary"),
+            configRootPath: configRootPath,
+            cliProbe: probe,
+            passProbe: passProbe,
+            dailyUsageAnalyzer: dailyUsageAnalyzer
+        )
+        self.accountDefinitions = [definition]
+        self.accounts = [definition.account]
+        self.activeAccountId = definition.account.accountId
+        self.primaryAccountId = definition.account.accountId
+        self.primaryAccount = definition.account
         self.settingsRepository = settingsRepository
-        self.dailyUsageAnalyzer = dailyUsageAnalyzer
-        // Load persisted enabled state (defaults to true)
+        self.onPrimaryAccountChange = nil
         self.isEnabled = settingsRepository.isEnabled(forProvider: "claude")
     }
 
-    /// Creates a Claude provider with both CLI and API probes
-    /// - Parameters:
-    ///   - cliProbe: The CLI probe for fetching usage via `claude /usage`
-    ///   - apiProbe: The API probe for fetching usage via HTTP API
-    ///   - passProbe: The probe to use for fetching guest pass data (optional)
-    ///   - settingsRepository: The repository for persisting settings (must be ClaudeSettingsRepository for mode switching)
     public init(
         cliProbe: any UsageProbe,
         apiProbe: any UsageProbe,
@@ -125,122 +102,199 @@ public final class ClaudeProvider: AIProvider, @unchecked Sendable {
         settingsRepository: any ClaudeSettingsRepository,
         dailyUsageAnalyzer: (any DailyUsageAnalyzing)? = nil
     ) {
-        self.cliProbe = cliProbe
-        self.apiProbe = apiProbe
-        self.passProbe = passProbe
+        let configRootPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude", isDirectory: true)
+            .path
+        let definition = ClaudeAccountDefinition(
+            account: ProviderAccount(providerId: "claude", label: "Primary"),
+            configRootPath: configRootPath,
+            cliProbe: cliProbe,
+            apiProbe: apiProbe,
+            passProbe: passProbe,
+            dailyUsageAnalyzer: dailyUsageAnalyzer
+        )
+        self.accountDefinitions = [definition]
+        self.accounts = [definition.account]
+        self.activeAccountId = definition.account.accountId
+        self.primaryAccountId = definition.account.accountId
+        self.primaryAccount = definition.account
         self.settingsRepository = settingsRepository
-        self.dailyUsageAnalyzer = dailyUsageAnalyzer
-        // Load persisted enabled state (defaults to true)
+        self.onPrimaryAccountChange = nil
         self.isEnabled = settingsRepository.isEnabled(forProvider: "claude")
     }
 
-    // MARK: - AIProvider Protocol
+    public init(
+        accounts: [ClaudeAccountDefinition],
+        settingsRepository: any ProviderSettingsRepository,
+        primaryAccountId: String? = nil,
+        onPrimaryAccountChange: ((ClaudeAccountDefinition) -> Void)? = nil
+    ) {
+        precondition(!accounts.isEmpty, "ClaudeProvider requires at least one account definition")
+
+        self.accountDefinitions = accounts
+        self.accounts = accounts.map(\.account)
+        self.settingsRepository = settingsRepository
+        self.onPrimaryAccountChange = onPrimaryAccountChange
+        self.isEnabled = settingsRepository.isEnabled(forProvider: "claude")
+
+        let persistedActiveAccountId = (settingsRepository as? MultiAccountSettingsRepository)?
+            .activeAccountId(forProvider: "claude")
+        self.activeAccountId = Self.validAccountId(
+            persistedActiveAccountId,
+            definitions: accounts
+        ) ?? accounts[0].account.accountId
+
+        let resolvedPrimaryAccountId = Self.validAccountId(primaryAccountId, definitions: accounts)
+            ?? Self.validAccountId(ProviderAccount.defaultAccountId, definitions: accounts)
+            ?? accounts[0].account.accountId
+        self.primaryAccountId = resolvedPrimaryAccountId
+        self.primaryAccount = accounts.first { $0.account.accountId == resolvedPrimaryAccountId }?.account
+        self.snapshot = nil
+    }
+
+    // MARK: - AIProvider
 
     public func isAvailable() async -> Bool {
+        let definition = activeDefinition
         switch probeMode {
         case .cli:
-            if await cliProbe.isAvailable() {
+            if await definition.cliProbe.isAvailable() {
                 return true
             }
-            if let apiProbe, await apiProbe.isAvailable() {
+            if let apiProbe = definition.apiProbe, await apiProbe.isAvailable() {
                 return true
             }
             return false
         case .api:
-            if let apiProbe, await apiProbe.isAvailable() {
+            if let apiProbe = definition.apiProbe, await apiProbe.isAvailable() {
                 return true
             }
             guard cliFallbackEnabled else { return false }
-            return await cliProbe.isAvailable()
+            return await definition.cliProbe.isAvailable()
         }
     }
 
-    /// Refreshes the usage data and updates the snapshot.
-    /// Uses the active probe based on current probe mode.
-    /// Sets isSyncing during refresh and captures any errors.
     @discardableResult
     public func refresh() async throws -> UsageSnapshot {
+        if accountDefinitions.count > 1 {
+            return try await refreshActiveAccountDefinition()
+        }
+
         isSyncing = true
         defer { isSyncing = false }
 
+        let definition = activeDefinition
         do {
-            let newSnapshot = try await primaryProbe().probe()
-            snapshot = await attachDailyReport(to: newSnapshot)
+            let refreshed = try await refresh(definition: definition)
+            accountSnapshots[definition.account.accountId] = refreshed
+            snapshot = refreshed
             lastError = nil
-            return snapshot!
+            return refreshed
         } catch {
-            if let fallback = await fallbackProbe() {
-                do {
-                    let newSnapshot = try await fallback.probe()
-                    snapshot = await attachDailyReport(to: newSnapshot)
-                    lastError = nil
-                    return snapshot!
-                } catch {
-                    lastError = error
-                    throw error
-                }
-            }
-
             lastError = error
             throw error
         }
     }
 
-    /// Attaches daily usage report to snapshot if analyzer is available.
-    private func attachDailyReport(to snapshot: UsageSnapshot) async -> UsageSnapshot {
-        guard let analyzer = dailyUsageAnalyzer,
-              let report = try? await analyzer.analyzeToday(),
-              !report.today.isEmpty || !report.previous.isEmpty else {
-            return snapshot
+    // MARK: - MultiAccountProvider
+
+    @discardableResult
+    public func switchAccount(to accountId: String) -> Bool {
+        guard definition(for: accountId) != nil else {
+            return false
         }
-        return UsageSnapshot(
-            providerId: snapshot.providerId,
-            quotas: snapshot.quotas,
-            capturedAt: snapshot.capturedAt,
-            accountEmail: snapshot.accountEmail,
-            accountOrganization: snapshot.accountOrganization,
-            loginMethod: snapshot.loginMethod,
-            accountTier: snapshot.accountTier,
-            costUsage: snapshot.costUsage,
-            bedrockUsage: snapshot.bedrockUsage,
-            dailyUsageReport: report
-        )
+
+        activeAccountId = accountId
+        snapshot = accountSnapshots[accountId]
+        guestPass = nil
+        lastError = nil
+        (settingsRepository as? MultiAccountSettingsRepository)?
+            .setActiveAccountId(accountId, forProvider: id)
+        return true
     }
 
-    private func primaryProbe() -> any UsageProbe {
-        switch probeMode {
-        case .cli:
-            return cliProbe
-        case .api:
-            return apiProbe ?? cliProbe
+    @discardableResult
+    public func refreshAccount(_ accountId: String) async throws -> UsageSnapshot {
+        guard let definition = definition(for: accountId) else {
+            throw ProbeError.executionFailed("Unknown Claude account: \(accountId)")
         }
-    }
 
-    private var cliFallbackEnabled: Bool {
-        (settingsRepository as? ClaudeSettingsRepository)?
-            .claudeCliFallbackEnabled() ?? true
-    }
-
-    private func fallbackProbe() async -> (any UsageProbe)? {
-        switch probeMode {
-        case .cli:
-            guard let apiProbe, await apiProbe.isAvailable() else {
-                return nil
+        do {
+            let refreshed = try await refresh(definition: definition)
+            accountSnapshots[accountId] = refreshed
+            if accountId == activeAccountId {
+                snapshot = refreshed
+                lastError = nil
             }
-            return apiProbe
-        case .api:
-            guard cliFallbackEnabled else { return nil }
-            return await cliProbe.isAvailable() ? cliProbe : nil
+            return refreshed
+        } catch {
+            if accountId == activeAccountId {
+                lastError = error
+                if let existingSnapshot = accountSnapshots[accountId] {
+                    snapshot = existingSnapshot
+                }
+            }
+            throw error
         }
+    }
+
+    public func refreshAllAccounts() async {
+        _ = try? await refreshAllAccountDefinitions()
+    }
+
+    // MARK: - Account Management
+
+    @discardableResult
+    public func setPrimaryAccount(to accountId: String) -> Bool {
+        guard let definition = definition(for: accountId) else {
+            return false
+        }
+
+        primaryAccountId = accountId
+        primaryAccount = definition.account
+        onPrimaryAccountChange?(definition)
+        return true
+    }
+
+    @discardableResult
+    public func setAlias(_ alias: String, for accountId: String) -> Bool {
+        guard let index = accountDefinitions.firstIndex(where: { $0.account.accountId == accountId }) else {
+            return false
+        }
+
+        let resolvedAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+        let updatedLabel = resolvedAlias.isEmpty ? accountDefinitions[index].defaultLabel : resolvedAlias
+        let current = accountDefinitions[index]
+        accountDefinitions[index].account = ProviderAccount(
+            accountId: current.account.accountId,
+            providerId: current.account.providerId,
+            label: updatedLabel,
+            email: current.account.email,
+            organization: current.account.organization
+        )
+        syncAccounts()
+
+        if let settings = settingsRepository as? MultiAccountSettingsRepository {
+            settings.updateAccount(
+                ProviderAccountConfig(
+                    accountId: current.account.accountId,
+                    label: updatedLabel,
+                    email: current.account.email,
+                    organization: current.account.organization,
+                    probeConfig: ["configRootPath": current.configRootPath]
+                ),
+                forProvider: id
+            )
+        }
+
+        return true
     }
 
     // MARK: - Guest Pass
 
-    /// Fetches the current guest pass information.
-    /// Sets isFetchingPasses during fetch and captures any errors.
     @discardableResult
     public func fetchPasses() async throws -> ClaudePass {
-        guard let passProbe else {
+        guard let passProbe = activeDefinition.passProbe else {
             throw PassError.probeNotConfigured
         }
 
@@ -258,14 +312,242 @@ public final class ClaudeProvider: AIProvider, @unchecked Sendable {
         }
     }
 
-    /// Whether guest passes feature is available
     public var supportsGuestPasses: Bool {
-        passProbe != nil
+        activeDefinition.passProbe != nil
     }
 
-    /// Whether API mode is available (API probe was provided)
     public var supportsApiMode: Bool {
-        apiProbe != nil
+        activeDefinition.apiProbe != nil
+    }
+
+    // MARK: - Private
+
+    private var activeDefinition: ClaudeAccountDefinition {
+        definition(for: activeAccountId) ?? accountDefinitions[0]
+    }
+
+    private var cliFallbackEnabled: Bool {
+        (settingsRepository as? ClaudeSettingsRepository)?
+            .claudeCliFallbackEnabled() ?? true
+    }
+
+    private func definition(for accountId: String) -> ClaudeAccountDefinition? {
+        accountDefinitions.first { $0.account.accountId == accountId }
+    }
+
+    private func refresh(definition: ClaudeAccountDefinition) async throws -> UsageSnapshot {
+        do {
+            let newSnapshot = try await primaryProbe(for: definition).probe()
+            return await attachDailyReport(to: newSnapshot, using: definition.dailyUsageAnalyzer)
+        } catch {
+            if let fallback = await fallbackProbe(for: definition) {
+                let newSnapshot = try await fallback.probe()
+                return await attachDailyReport(to: newSnapshot, using: definition.dailyUsageAnalyzer)
+            }
+            throw error
+        }
+    }
+
+    @discardableResult
+    private func refreshActiveAccountDefinition() async throws -> UsageSnapshot {
+        isSyncing = true
+        defer { isSyncing = false }
+
+        let definition = activeDefinition
+        let accountId = definition.account.accountId
+
+        do {
+            let refreshed = try await refresh(definition: definition)
+            accountSnapshots[accountId] = refreshed
+            snapshot = refreshed
+            lastError = nil
+            warmInactiveAccountsIfNeeded(excluding: accountId)
+            return refreshed
+        } catch {
+            if let existingSnapshot = accountSnapshots[accountId] {
+                snapshot = existingSnapshot
+            }
+            lastError = error
+            throw error
+        }
+    }
+
+    @discardableResult
+    private func refreshAllAccountDefinitions() async throws -> UsageSnapshot {
+        isSyncing = true
+        defer { isSyncing = false }
+
+        let definitions = accountDefinitions
+        let currentActiveId = activeAccountId
+        var refreshedSnapshots: [String: UsageSnapshot] = [:]
+        var activeError: Error?
+
+        await withTaskGroup(of: (String, Result<UsageSnapshot, Error>).self) { group in
+            for definition in definitions {
+                let accountId = definition.account.accountId
+                group.addTask { [self] in
+                    do {
+                        let snapshot = try await self.refresh(definition: definition)
+                        return (accountId, .success(snapshot))
+                    } catch {
+                        return (accountId, .failure(error))
+                    }
+                }
+            }
+
+            for await (accountId, result) in group {
+                switch result {
+                case let .success(snapshot):
+                    refreshedSnapshots[accountId] = snapshot
+                case let .failure(error):
+                    if accountId == currentActiveId {
+                        activeError = error
+                    }
+                }
+            }
+        }
+
+        accountSnapshots.merge(refreshedSnapshots) { _, new in new }
+
+        if let refreshedActiveSnapshot = refreshedSnapshots[currentActiveId] {
+            snapshot = refreshedActiveSnapshot
+            lastError = nil
+            return refreshedActiveSnapshot
+        }
+
+        if let activeError {
+            if let existingActiveSnapshot = accountSnapshots[currentActiveId] {
+                snapshot = existingActiveSnapshot
+            }
+            lastError = activeError
+            throw activeError
+        }
+
+        if let activeSnapshot = accountSnapshots[currentActiveId] {
+            snapshot = activeSnapshot
+            lastError = nil
+            return activeSnapshot
+        }
+
+        let fallbackError = ProbeError.executionFailed("No Claude account snapshots available")
+        lastError = fallbackError
+        throw fallbackError
+    }
+
+    private func warmInactiveAccountsIfNeeded(excluding activeAccountId: String) {
+        let definitionsToWarm = accountDefinitions.filter { definition in
+            guard definition.account.accountId != activeAccountId else {
+                return false
+            }
+
+            guard let snapshot = accountSnapshots[definition.account.accountId] else {
+                return true
+            }
+
+            return snapshot.isStale
+        }
+
+        guard !definitionsToWarm.isEmpty else {
+            return
+        }
+
+        accountWarmTask?.cancel()
+        accountWarmTask = Task { [self, definitionsToWarm] in
+            var refreshedSnapshots: [String: UsageSnapshot] = [:]
+
+            await withTaskGroup(of: (String, UsageSnapshot?).self) { group in
+                for definition in definitionsToWarm {
+                    let accountId = definition.account.accountId
+                    group.addTask { [self] in
+                        do {
+                            let snapshot = try await refresh(definition: definition)
+                            return (accountId, snapshot)
+                        } catch {
+                            return (accountId, nil)
+                        }
+                    }
+                }
+
+                for await (accountId, snapshot) in group {
+                    if let snapshot {
+                        refreshedSnapshots[accountId] = snapshot
+                    }
+                }
+            }
+
+            guard !Task.isCancelled, !refreshedSnapshots.isEmpty else {
+                return
+            }
+
+            accountSnapshots.merge(refreshedSnapshots) { _, new in new }
+            if let activeSnapshot = accountSnapshots[self.activeAccountId] {
+                snapshot = activeSnapshot
+            }
+        }
+    }
+
+    private func primaryProbe(for definition: ClaudeAccountDefinition) -> any UsageProbe {
+        switch probeMode {
+        case .cli:
+            return definition.cliProbe
+        case .api:
+            return definition.apiProbe ?? definition.cliProbe
+        }
+    }
+
+    private func fallbackProbe(for definition: ClaudeAccountDefinition) async -> (any UsageProbe)? {
+        switch probeMode {
+        case .cli:
+            guard let apiProbe = definition.apiProbe, await apiProbe.isAvailable() else {
+                return nil
+            }
+            return apiProbe
+        case .api:
+            guard cliFallbackEnabled else {
+                return nil
+            }
+            return await definition.cliProbe.isAvailable() ? definition.cliProbe : nil
+        }
+    }
+
+    private func attachDailyReport(
+        to snapshot: UsageSnapshot,
+        using analyzer: (any DailyUsageAnalyzing)?
+    ) async -> UsageSnapshot {
+        guard let analyzer,
+              let report = try? await analyzer.analyzeToday(),
+              !report.today.isEmpty || !report.previous.isEmpty else {
+            return snapshot
+        }
+
+        return UsageSnapshot(
+            providerId: snapshot.providerId,
+            quotas: snapshot.quotas,
+            capturedAt: snapshot.capturedAt,
+            accountEmail: snapshot.accountEmail,
+            accountOrganization: snapshot.accountOrganization,
+            loginMethod: snapshot.loginMethod,
+            accountTier: snapshot.accountTier,
+            costUsage: snapshot.costUsage,
+            bedrockUsage: snapshot.bedrockUsage,
+            dailyUsageReport: report
+        )
+    }
+
+    private func syncAccounts() {
+        accounts = accountDefinitions.map(\.account)
+        primaryAccount = definition(for: primaryAccountId)?.account
+        if let activeSnapshot = accountSnapshots[activeAccountId] {
+            snapshot = activeSnapshot
+        }
+    }
+
+    private static func validAccountId(
+        _ candidate: String?,
+        definitions: [ClaudeAccountDefinition]
+    ) -> String? {
+        guard let candidate else { return nil }
+        return definitions.contains(where: { $0.account.accountId == candidate }) ? candidate : nil
     }
 }
 

@@ -13,6 +13,7 @@ public final class JSONSettingsRepository:
     CopilotSettingsRepository,
     BedrockSettingsRepository,
     ClaudeSettingsRepository,
+    MultiAccountSettingsRepository,
     CodexSettingsRepository,
     KimiSettingsRepository,
     MiniMaxSettingsRepository,
@@ -150,6 +151,47 @@ public final class JSONSettingsRepository:
         store.write(value: value, key: "providers.\(id).customCardURL")
     }
 
+    // MARK: - MultiAccountSettingsRepository
+
+    public func accounts(forProvider id: String) -> [ProviderAccountConfig] {
+        guard let rawAccounts: [[String: Any]] = store.read(key: "providers.\(id).accounts") else {
+            return []
+        }
+
+        return rawAccounts.compactMap { rawAccount in
+            guard JSONSerialization.isValidJSONObject(rawAccount),
+                  let data = try? JSONSerialization.data(withJSONObject: rawAccount),
+                  let config = try? JSONDecoder().decode(ProviderAccountConfig.self, from: data) else {
+                return nil
+            }
+            return config
+        }
+    }
+
+    public func addAccount(_ config: ProviderAccountConfig, forProvider id: String) {
+        var current = accounts(forProvider: id)
+        current.removeAll { $0.accountId == config.accountId }
+        current.append(config)
+        writeAccounts(current, forProvider: id)
+    }
+
+    public func removeAccount(accountId: String, forProvider id: String) {
+        let updated = accounts(forProvider: id).filter { $0.accountId != accountId }
+        writeAccounts(updated, forProvider: id)
+    }
+
+    public func updateAccount(_ config: ProviderAccountConfig, forProvider id: String) {
+        addAccount(config, forProvider: id)
+    }
+
+    public func activeAccountId(forProvider id: String) -> String? {
+        store.read(key: "providers.\(id).activeAccountId")
+    }
+
+    public func setActiveAccountId(_ accountId: String?, forProvider id: String) {
+        store.write(value: accountId, key: "providers.\(id).activeAccountId")
+    }
+
     // MARK: - ClaudeSettingsRepository
 
     public func claudeProbeMode() -> ClaudeProbeMode {
@@ -170,6 +212,18 @@ public final class JSONSettingsRepository:
 
     public func setClaudeCliFallbackEnabled(_ enabled: Bool) {
         store.write(value: enabled, key: "claude.cliFallbackEnabled")
+    }
+
+    private func writeAccounts(_ configs: [ProviderAccountConfig], forProvider id: String) {
+        let encodedAccounts: [[String: Any]] = configs.compactMap { config in
+            guard let data = try? JSONEncoder().encode(config),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return nil
+            }
+            return object
+        }
+
+        store.write(value: encodedAccounts, key: "providers.\(id).accounts")
     }
 
     // MARK: - CodexSettingsRepository

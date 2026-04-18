@@ -42,6 +42,14 @@ struct InteractiveRunnerTests {
     }
 
     @Test
+    func `Options stores environmentOverrides`() {
+        let options = InteractiveRunner.Options(
+            environmentOverrides: ["CLAUDE_CONFIG_DIR": "/Users/test/.claude-secondary"]
+        )
+        #expect(options.environmentOverrides == ["CLAUDE_CONFIG_DIR": "/Users/test/.claude-secondary"])
+    }
+
+    @Test
     func `run with environmentExclusions strips env vars from subprocess`() throws {
         let runner = InteractiveRunner()
         // Set a test env var that we'll verify is excluded
@@ -74,6 +82,21 @@ struct InteractiveRunnerTests {
         )
 
         #expect(result.output.contains("CLAUDEBAR_TEST_PRESERVE_VAR=should_be_present"))
+    }
+
+    @Test
+    func `run with environmentOverrides injects env vars into subprocess`() throws {
+        let runner = InteractiveRunner()
+
+        let result = try runner.run(
+            binary: "/usr/bin/env",
+            input: "",
+            options: .init(
+                environmentOverrides: ["CLAUDEBAR_TEST_OVERRIDE_VAR": "override_value"]
+            )
+        )
+
+        #expect(result.output.contains("CLAUDEBAR_TEST_OVERRIDE_VAR=override_value"))
     }
 }
 

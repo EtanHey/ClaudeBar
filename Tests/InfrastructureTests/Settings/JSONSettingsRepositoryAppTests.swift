@@ -205,4 +205,59 @@ struct JSONSettingsRepositoryAppTests {
         #expect(repo2.showDailyUsageCards() == false)
         #expect(repo2.overviewModeEnabled() == true)
     }
+
+    // MARK: - Multi Account
+
+    @Test
+    func `activeAccountId defaults to nil`() {
+        let (repo, dir) = makeRepository()
+        defer { cleanup(dir) }
+
+        #expect(repo.activeAccountId(forProvider: "claude") == nil)
+    }
+
+    @Test
+    func `setActiveAccountId persists value`() {
+        let (repo, dir) = makeRepository()
+        defer { cleanup(dir) }
+
+        repo.setActiveAccountId("secondary", forProvider: "claude")
+
+        #expect(repo.activeAccountId(forProvider: "claude") == "secondary")
+    }
+
+    @Test
+    func `add update and remove account configs persist per provider`() {
+        let (repo, dir) = makeRepository()
+        defer { cleanup(dir) }
+
+        repo.addAccount(
+            ProviderAccountConfig(
+                accountId: "secondary",
+                label: "Secondary",
+                email: "secondary@example.com",
+                probeConfig: ["configRootPath": "/Users/test/.claude-secondary"]
+            ),
+            forProvider: "claude"
+        )
+
+        #expect(repo.accounts(forProvider: "claude").count == 1)
+        #expect(repo.accounts(forProvider: "claude").first?.label == "Secondary")
+
+        repo.updateAccount(
+            ProviderAccountConfig(
+                accountId: "secondary",
+                label: "Work",
+                email: "secondary@example.com",
+                probeConfig: ["configRootPath": "/Users/test/.claude-secondary"]
+            ),
+            forProvider: "claude"
+        )
+
+        #expect(repo.accounts(forProvider: "claude").count == 1)
+        #expect(repo.accounts(forProvider: "claude").first?.label == "Work")
+
+        repo.removeAccount(accountId: "secondary", forProvider: "claude")
+        #expect(repo.accounts(forProvider: "claude").isEmpty)
+    }
 }

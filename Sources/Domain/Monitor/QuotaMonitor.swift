@@ -25,6 +25,8 @@ public final class QuotaMonitor: @unchecked Sendable {
 
     /// Previous status for change detection
     private var previousStatuses: [String: QuotaStatus] = [:]
+    /// Protects shared status bookkeeping during concurrent refreshes.
+    private let previousStatusesLock = NSLock()
 
     /// Current monitoring task
     private var monitoringTask: Task<Void, Never>?
@@ -81,10 +83,8 @@ public final class QuotaMonitor: @unchecked Sendable {
 
     /// Handles snapshot update and alerts user if status changed
     private func handleSnapshotUpdate(provider: any AIProvider, snapshot: UsageSnapshot) async {
-        let previousStatus = previousStatuses[provider.id] ?? .healthy
         let newStatus = snapshot.overallStatus
-
-        previousStatuses[provider.id] = newStatus
+        let previousStatus = updatePreviousStatus(for: provider.id, to: newStatus)
 
         // Alert user only if status changed
         if previousStatus != newStatus, let alerter = alerter {
@@ -94,6 +94,15 @@ public final class QuotaMonitor: @unchecked Sendable {
                 currentStatus: newStatus
             )
         }
+    }
+
+    private func updatePreviousStatus(for providerId: String, to newStatus: QuotaStatus) -> QuotaStatus {
+        previousStatusesLock.lock()
+        defer { previousStatusesLock.unlock() }
+
+        let previousStatus = previousStatuses[providerId] ?? .healthy
+        previousStatuses[providerId] = newStatus
+        return previousStatus
     }
 
     /// Refreshes a single provider by its ID.

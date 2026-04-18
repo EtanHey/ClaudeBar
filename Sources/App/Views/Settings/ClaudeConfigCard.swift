@@ -15,6 +15,14 @@ struct ClaudeConfigCard: View {
     @State private var claudeCliFallbackEnabled: Bool = true
     @State private var budgetInput: String = ""
 
+    private var claudeProvider: ClaudeProvider? {
+        monitor.provider(for: "claude") as? ClaudeProvider
+    }
+
+    private var isMultiAccountClaude: Bool {
+        (claudeProvider?.accounts.count ?? 1) > 1
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             configCard
@@ -23,6 +31,10 @@ struct ClaudeConfigCard: View {
         .onAppear {
             claudeProbeMode = settings.claude.claudeProbeMode()
             claudeCliFallbackEnabled = settings.claude.claudeCliFallbackEnabled()
+            if isMultiAccountClaude && claudeProbeMode != .cli {
+                claudeProbeMode = .cli
+                settings.claude.setClaudeProbeMode(.cli)
+            }
             if settings.claudeApiBudget > 0 {
                 budgetInput = String(describing: settings.claudeApiBudget)
             }
@@ -104,96 +116,130 @@ struct ClaudeConfigCard: View {
 
     private var configForm: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("PROBE MODE")
-                    .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
-                    .foregroundStyle(theme.textSecondary)
-                    .tracking(0.5)
-
-                Picker("", selection: $claudeProbeMode) {
-                    ForEach(ClaudeProbeMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: claudeProbeMode) { _, newValue in
-                    settings.claude.setClaudeProbeMode(newValue)
-                    Task {
-                        await monitor.refresh(providerId: "claude")
-                    }
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "terminal")
-                        .font(.system(size: 10))
-                        .foregroundStyle(claudeProbeMode == .cli ? theme.accentPrimary : theme.textTertiary)
-                        .frame(width: 16)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("CLI Mode")
-                            .font(.system(size: 10, weight: .semibold, design: theme.fontDesign))
-                            .foregroundStyle(claudeProbeMode == .cli ? theme.textPrimary : theme.textSecondary)
-
-                        Text("Runs `claude /usage` command. Works with any auth method.")
-                            .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
-                            .foregroundStyle(theme.textTertiary)
-                    }
-                }
-
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "network")
-                        .font(.system(size: 10))
-                        .foregroundStyle(claudeProbeMode == .api ? theme.accentPrimary : theme.textTertiary)
-                        .frame(width: 16)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("API Mode")
-                            .font(.system(size: 10, weight: .semibold, design: theme.fontDesign))
-                            .foregroundStyle(claudeProbeMode == .api ? theme.textPrimary : theme.textSecondary)
-
-                        Text("Calls Anthropic API directly. Faster, uses OAuth credentials.")
-                            .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
-                            .foregroundStyle(theme.textTertiary)
-                    }
-                }
-            }
-
-            if claudeProbeMode == .api {
-                let credentialLoader = ClaudeCredentialLoader()
-                let hasCredentials = credentialLoader.loadCredentials() != nil
-
-                HStack(spacing: 6) {
-                    Image(systemName: hasCredentials ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(hasCredentials ? theme.statusHealthy : theme.statusWarning)
-
-                    Text(hasCredentials ? "OAuth credentials found" : "No OAuth credentials found")
+            if isMultiAccountClaude {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("MULTI-ACCOUNT MODE")
                         .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
-                        .foregroundStyle(hasCredentials ? theme.statusHealthy : theme.statusWarning)
+                        .foregroundStyle(theme.textSecondary)
+                        .tracking(0.5)
+
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "person.2.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(theme.accentPrimary)
+                            .frame(width: 16)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("CLI mode is used for discovered Claude accounts")
+                                .font(.system(size: 10, weight: .semibold, design: theme.fontDesign))
+                                .foregroundStyle(theme.textPrimary)
+
+                            Text("ClaudeBar follows the same auth roots as `claude auth status`, and you can choose both the viewed account and the default for bare `claude`.")
+                                .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                                .foregroundStyle(theme.textTertiary)
+                        }
+                    }
                 }
 
-                if !hasCredentials {
-                    Text("Run `claude` in terminal to authenticate, then credentials will be available.")
-                        .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
-                        .foregroundStyle(theme.textTertiary)
+                if let claudeProvider {
+                    Divider()
+                        .background(theme.glassBorder)
+                        .padding(.vertical, 4)
+
+                    AccountManagementCard(provider: claudeProvider)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("PROBE MODE")
+                        .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                        .foregroundStyle(theme.textSecondary)
+                        .tracking(0.5)
+
+                    Picker("", selection: $claudeProbeMode) {
+                        ForEach(ClaudeProbeMode.allCases, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: claudeProbeMode) { _, newValue in
+                        settings.claude.setClaudeProbeMode(newValue)
+                        Task {
+                            await monitor.refresh(providerId: "claude")
+                        }
+                    }
                 }
 
-                Toggle(isOn: $claudeCliFallbackEnabled) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("CLI fallback")
-                            .font(.system(size: 10, weight: .semibold, design: theme.fontDesign))
-                            .foregroundStyle(theme.textPrimary)
-                        Text("Fall back to `claude /usage` if OAuth API is unavailable.")
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "terminal")
+                            .font(.system(size: 10))
+                            .foregroundStyle(claudeProbeMode == .cli ? theme.accentPrimary : theme.textTertiary)
+                            .frame(width: 16)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("CLI Mode")
+                                .font(.system(size: 10, weight: .semibold, design: theme.fontDesign))
+                                .foregroundStyle(claudeProbeMode == .cli ? theme.textPrimary : theme.textSecondary)
+
+                            Text("Runs `claude /usage` command. Works with any auth method.")
+                                .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                                .foregroundStyle(theme.textTertiary)
+                        }
+                    }
+
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "network")
+                            .font(.system(size: 10))
+                            .foregroundStyle(claudeProbeMode == .api ? theme.accentPrimary : theme.textTertiary)
+                            .frame(width: 16)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("API Mode")
+                                .font(.system(size: 10, weight: .semibold, design: theme.fontDesign))
+                                .foregroundStyle(claudeProbeMode == .api ? theme.textPrimary : theme.textSecondary)
+
+                            Text("Calls Anthropic API directly. Faster, uses OAuth credentials.")
+                                .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                                .foregroundStyle(theme.textTertiary)
+                        }
+                    }
+                }
+
+                if claudeProbeMode == .api {
+                    let credentialLoader = ClaudeCredentialLoader()
+                    let hasCredentials = credentialLoader.loadCredentials() != nil
+
+                    HStack(spacing: 6) {
+                        Image(systemName: hasCredentials ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(hasCredentials ? theme.statusHealthy : theme.statusWarning)
+
+                        Text(hasCredentials ? "OAuth credentials found" : "No OAuth credentials found")
+                            .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                            .foregroundStyle(hasCredentials ? theme.statusHealthy : theme.statusWarning)
+                    }
+
+                    if !hasCredentials {
+                        Text("Run `claude` in terminal to authenticate, then credentials will be available.")
                             .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
                             .foregroundStyle(theme.textTertiary)
                     }
-                }
-                .toggleStyle(.switch)
-                .tint(theme.accentPrimary)
-                .onChange(of: claudeCliFallbackEnabled) { _, newValue in
-                    settings.claude.setClaudeCliFallbackEnabled(newValue)
+
+                    Toggle(isOn: $claudeCliFallbackEnabled) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("CLI fallback")
+                                .font(.system(size: 10, weight: .semibold, design: theme.fontDesign))
+                                .foregroundStyle(theme.textPrimary)
+                            Text("Fall back to `claude /usage` if OAuth API is unavailable.")
+                                .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                                .foregroundStyle(theme.textTertiary)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .tint(theme.accentPrimary)
+                    .onChange(of: claudeCliFallbackEnabled) { _, newValue in
+                        settings.claude.setClaudeCliFallbackEnabled(newValue)
+                    }
                 }
             }
         }

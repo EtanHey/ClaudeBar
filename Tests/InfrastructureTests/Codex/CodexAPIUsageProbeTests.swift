@@ -267,6 +267,65 @@ struct CodexAPIUsageProbeTests {
         #expect(snapshot.costUsage?.budget == 1000)
     }
 
+    @Test
+    func `probe parses additional model specific rate limits and credits from body`() async throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try createAuthFile(at: tempDir)
+
+        let mockNetwork = MockNetworkClient()
+        let responseJSON = """
+        {
+          "email": "etan@heyman.net",
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 24.0,
+              "reset_at": 1776487025
+            }
+          },
+          "additional_rate_limits": [
+            {
+              "limit_name": "GPT-5.3-Codex-Spark",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 0,
+                  "reset_at": 1776494866
+                },
+                "secondary_window": {
+                  "used_percent": 5,
+                  "reset_at": 1776683060
+                }
+              }
+            }
+          ],
+          "credits": {
+            "balance": "0"
+          }
+        }
+        """.data(using: .utf8)!
+
+        let response = HTTPURLResponse(
+            url: URL(string: "https://chatgpt.com")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        given(mockNetwork).request(.any).willReturn((responseJSON, response))
+
+        let loader = CodexCredentialLoader(homeDirectory: tempDir.path)
+        let probe = CodexAPIUsageProbe(credentialLoader: loader, networkClient: mockNetwork)
+
+        let snapshot = try await probe.probe()
+
+        #expect(snapshot.accountEmail == "etan@heyman.net")
+        #expect(snapshot.costUsage?.budget == 1000)
+        #expect(snapshot.costUsage?.totalCost == 1000)
+        #expect(snapshot.quota(for: .timeLimit("GPT-5.3-Codex-Spark 5h"))?.percentRemaining == 100)
+        #expect(snapshot.quota(for: .timeLimit("GPT-5.3-Codex-Spark Weekly"))?.percentRemaining == 95)
+    }
+
     // MARK: - Empty Response Tests
 
     @Test

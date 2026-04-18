@@ -14,6 +14,7 @@ let packageSettings = PackageSettings(
         "IssueReporting": ["SWIFT_PACKAGE_NAME": "xctest-dynamic-overlay"],
         "IssueReportingPackageSupport": ["SWIFT_PACKAGE_NAME": "xctest-dynamic-overlay"],
         "SwiftTerm": ["EXCLUDED_SOURCE_FILE_NAMES": "Shaders.metal"],
+        "SwiftTerm_SwiftTerm": ["EXCLUDED_SOURCE_FILE_NAMES": "Shaders.metal"],
     ]
 )
 #endif
