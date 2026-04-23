@@ -768,6 +768,12 @@ struct MenuContentView: View {
                 CostStatCard(costUsage: costUsage, budget: budget, delay: Double(snapshot.quotas.count) * 0.08)
             }
 
+            if snapshot.providerId == "codex",
+               let report = snapshot.codexLocalAnalyticsReport {
+                let analyticsDelay = Double(snapshot.quotas.count + (snapshot.costUsage == nil ? 0 : 1)) * 0.08
+                CodexLocalAnalyticsBlockView(report: report, delay: analyticsDelay)
+            }
+
             // Show Bedrock usage card if available
             if let bedrockUsage = snapshot.bedrockUsage {
                 BedrockUsageCard(usage: bedrockUsage, delay: Double(snapshot.quotas.count) * 0.08)
