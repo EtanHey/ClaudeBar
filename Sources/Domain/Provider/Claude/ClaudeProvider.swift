@@ -29,6 +29,7 @@ public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked 
     public private(set) var isSyncing: Bool = false
     public private(set) var snapshot: UsageSnapshot?
     public private(set) var lastError: Error?
+    public private(set) var accountErrors: [String: Error] = [:]
     public private(set) var guestPass: ClaudePass?
     public private(set) var isFetchingPasses: Bool = false
 
@@ -188,10 +189,10 @@ public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked 
             let refreshed = try await refresh(definition: definition)
             accountSnapshots[definition.account.accountId] = refreshed
             snapshot = refreshed
-            lastError = nil
+            clearAccountError(for: definition.account.accountId)
             return refreshed
         } catch {
-            lastError = error
+            storeAccountError(error, for: definition.account.accountId)
             throw error
         }
     }
@@ -207,7 +208,7 @@ public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked 
         activeAccountId = accountId
         snapshot = accountSnapshots[accountId]
         guestPass = nil
-        lastError = nil
+        lastError = accountErrors[accountId]
         (settingsRepository as? MultiAccountSettingsRepository)?
             .setActiveAccountId(accountId, forProvider: id)
         return true
@@ -222,14 +223,14 @@ public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked 
         do {
             let refreshed = try await refresh(definition: definition)
             accountSnapshots[accountId] = refreshed
+            clearAccountError(for: accountId)
             if accountId == activeAccountId {
                 snapshot = refreshed
-                lastError = nil
             }
             return refreshed
         } catch {
+            storeAccountError(error, for: accountId)
             if accountId == activeAccountId {
-                lastError = error
                 if let existingSnapshot = accountSnapshots[accountId] {
                     snapshot = existingSnapshot
                 }
@@ -240,6 +241,10 @@ public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked 
 
     public func refreshAllAccounts() async {
         _ = try? await refreshAllAccountDefinitions()
+    }
+
+    public func accountError(for accountId: String) -> Error? {
+        accountErrors[accountId]
     }
 
     // MARK: - Account Management
@@ -335,6 +340,20 @@ public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked 
         accountDefinitions.first { $0.account.accountId == accountId }
     }
 
+    private func clearAccountError(for accountId: String) {
+        accountErrors.removeValue(forKey: accountId)
+        if accountId == activeAccountId {
+            lastError = nil
+        }
+    }
+
+    private func storeAccountError(_ error: Error, for accountId: String) {
+        accountErrors[accountId] = error
+        if accountId == activeAccountId {
+            lastError = error
+        }
+    }
+
     private func refresh(definition: ClaudeAccountDefinition) async throws -> UsageSnapshot {
         do {
             let newSnapshot = try await primaryProbe(for: definition).probe()
@@ -360,14 +379,14 @@ public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked 
             let refreshed = try await refresh(definition: definition)
             accountSnapshots[accountId] = refreshed
             snapshot = refreshed
-            lastError = nil
+            clearAccountError(for: accountId)
             warmInactiveAccountsIfNeeded(excluding: accountId)
             return refreshed
         } catch {
             if let existingSnapshot = accountSnapshots[accountId] {
                 snapshot = existingSnapshot
             }
-            lastError = error
+            storeAccountError(error, for: accountId)
             throw error
         }
     }
@@ -380,6 +399,7 @@ public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked 
         let definitions = accountDefinitions
         let currentActiveId = activeAccountId
         var refreshedSnapshots: [String: UsageSnapshot] = [:]
+        var refreshErrors: [String: Error] = [:]
         var activeError: Error?
 
         await withTaskGroup(of: (String, Result<UsageSnapshot, Error>).self) { group in
@@ -400,6 +420,7 @@ public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked 
                 case let .success(snapshot):
                     refreshedSnapshots[accountId] = snapshot
                 case let .failure(error):
+                    refreshErrors[accountId] = error
                     if accountId == currentActiveId {
                         activeError = error
                     }
@@ -408,6 +429,14 @@ public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked 
         }
 
         accountSnapshots.merge(refreshedSnapshots) { _, new in new }
+        for definition in definitions {
+            let accountId = definition.account.accountId
+            if let error = refreshErrors[accountId] {
+                accountErrors[accountId] = error
+            } else if refreshedSnapshots[accountId] != nil {
+                accountErrors.removeValue(forKey: accountId)
+            }
+        }
 
         if let refreshedActiveSnapshot = refreshedSnapshots[currentActiveId] {
             snapshot = refreshedActiveSnapshot
@@ -430,7 +459,7 @@ public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked 
         }
 
         let fallbackError = ProbeError.executionFailed("No Claude account snapshots available")
-        lastError = fallbackError
+        storeAccountError(fallbackError, for: currentActiveId)
         throw fallbackError
     }
 
@@ -454,32 +483,44 @@ public final class ClaudeProvider: AIProvider, MultiAccountProvider, @unchecked 
         accountWarmTask?.cancel()
         accountWarmTask = Task { [self, definitionsToWarm] in
             var refreshedSnapshots: [String: UsageSnapshot] = [:]
+            var refreshErrors: [String: Error] = [:]
 
-            await withTaskGroup(of: (String, UsageSnapshot?).self) { group in
+            await withTaskGroup(of: (String, Result<UsageSnapshot, Error>).self) { group in
                 for definition in definitionsToWarm {
                     let accountId = definition.account.accountId
                     group.addTask { [self] in
                         do {
                             let snapshot = try await refresh(definition: definition)
-                            return (accountId, snapshot)
+                            return (accountId, .success(snapshot))
                         } catch {
-                            return (accountId, nil)
+                            return (accountId, .failure(error))
                         }
                     }
                 }
 
-                for await (accountId, snapshot) in group {
-                    if let snapshot {
+                for await (accountId, result) in group {
+                    switch result {
+                    case let .success(snapshot):
                         refreshedSnapshots[accountId] = snapshot
+                    case let .failure(error):
+                        refreshErrors[accountId] = error
                     }
                 }
             }
 
-            guard !Task.isCancelled, !refreshedSnapshots.isEmpty else {
+            guard !Task.isCancelled else {
                 return
             }
 
             accountSnapshots.merge(refreshedSnapshots) { _, new in new }
+            for definition in definitionsToWarm {
+                let accountId = definition.account.accountId
+                if let error = refreshErrors[accountId] {
+                    accountErrors[accountId] = error
+                } else if refreshedSnapshots[accountId] != nil {
+                    accountErrors.removeValue(forKey: accountId)
+                }
+            }
             if let activeSnapshot = accountSnapshots[self.activeAccountId] {
                 snapshot = activeSnapshot
             }

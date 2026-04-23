@@ -543,6 +543,7 @@ struct MenuContentView: View {
     private func claudeAccountPage(provider: ClaudeProvider, account: ProviderAccount) -> some View {
         let snapshot = provider.accountSnapshots[account.accountId]
             ?? (account.accountId == provider.activeAccount.accountId ? provider.snapshot : nil)
+        let accountError = provider.accountError(for: account.accountId)
 
         VStack(spacing: 12) {
             if let snapshot {
@@ -558,6 +559,8 @@ struct MenuContentView: View {
                 }
 
                 statsGrid(snapshot: snapshot)
+            } else if let accountError {
+                claudeAccountErrorState(account: account, error: accountError)
             } else if provider.isSyncing && account.accountId == provider.activeAccount.accountId {
                 loadingState
             } else {
@@ -580,6 +583,31 @@ struct MenuContentView: View {
                 .glassCard()
             }
         }
+    }
+
+    private func claudeAccountErrorState(account: ProviderAccount, error: any Error) -> some View {
+        VStack(spacing: 10) {
+            Text(account.label)
+                .font(.system(size: 13, weight: .bold, design: theme.fontDesign))
+                .foregroundStyle(theme.textPrimary)
+
+            if let email = account.email {
+                Text(email)
+                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                    .foregroundStyle(theme.textTertiary)
+            }
+
+            Label("Refresh failed", systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
+                .foregroundStyle(theme.statusWarning)
+
+            Text(error.localizedDescription)
+                .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                .foregroundStyle(theme.textTertiary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .glassCard()
     }
 
     private func compactErrorState(provider: any AIProvider) -> some View {
