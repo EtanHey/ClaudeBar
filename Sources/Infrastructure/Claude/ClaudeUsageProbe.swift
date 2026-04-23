@@ -595,7 +595,7 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
     }
 
     internal func normalizeLabelSearchText(_ text: String) -> String {
-        text.lowercased().filter(\.isLetterOrNumber)
+        String(text.lowercased().filter { $0.isLetter || $0.isNumber })
     }
 
     internal func rawPercentLabelMatches(_ normalizedLine: String, expected: String) -> Bool {
