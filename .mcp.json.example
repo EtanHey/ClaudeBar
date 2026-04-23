@@ -1,5 +1,5 @@
 {
-  "_note": "Copy to .mcp.json and fill in secrets. .mcp.json is gitignored.",
+  "_note": "Copy to .mcp.json, fill in EXA_API_KEY, and replace /PATH/TO/cmuxlayer with your local checkout path. .mcp.json is gitignored.",
   "_updated": "2026-04-18",
   "mcpServers": {
     "brainlayer": {
@@ -19,7 +19,7 @@
     },
     "cmux": {
       "command": "bun",
-      "args": ["run", "/Users/etanheyman/Gits/cmuxlayer/src/index.ts"]
+      "args": ["run", "/PATH/TO/cmuxlayer/src/index.ts"]
     }
   }
 }
