@@ -357,3 +357,38 @@ Common error patterns logged:
 - **Sparkle**: Auto-update framework for macOS
 - **Mockable**: Protocol mocking for tests via Swift macros
 - **Tuist**: Xcode project generation for SwiftUI previews (`ENABLE_DEBUG_DYLIB`)
+
+## Workspace Setup
+
+Fork-specific integration for the golems ecosystem. Does not affect the upstream `tddworks/ClaudeBar` behavior.
+
+### MCP servers
+
+This repo uses a workspace-scoped `.mcp.json` wiring four servers. **The file is gitignored** (it holds an API key); copy from `.mcp.json.example` and fill in your `EXA_API_KEY` on first clone.
+
+- **brainlayer** — cross-session memory. Use `brain_search` before cold-reading files for prior decisions.
+- **context7** — current docs for Swift 6.2, Tuist, macOS 15, Sparkle, Mockable. Prefer this over web search for library APIs.
+- **exa** — general web search fallback.
+- **cmux** — pane/agent control (sibling surfaces, agent-to-agent messages, splits). See `/cmux` skill.
+
+Other MCPs (voicelayer, supabase, etc.) are available globally from `~/.claude/settings.json` when the parent shell provides them; this file only pins what every agent in this repo needs.
+
+### Repo orchestrator
+
+Parent orchestrator lives at `~/Gits/orchestrator`. Cross-repo dispatches land in `~/Gits/orchestrator/docs.local/dispatches/`. When coordinating work that touches ClaudeBar plus another repo (e.g. a launcher change in `golem-powers`), post to the orchestrator rather than forking the conversation here.
+
+### Launchers
+
+Expected repoGolem entries for this repo:
+
+- `claudebarClaude [-s|-c]` — Claude Code session in `~/Gits/ClaudeBar`
+- `claudebarCodex [-s|-c]` — Codex CLI session in `~/Gits/ClaudeBar`
+- `claudebarCursor [-s|-c]` — Cursor CLI session in `~/Gits/ClaudeBar`
+
+Flags: `-s` skip intro / dive into task, `-c` continue previous session.
+
+If any launcher is missing, flag it to orc — don't hand-roll `cd ~/Gits/ClaudeBar && <agent>`.
+
+### Agent routing
+
+See `AGENTS.md` and `standards/agents.md` for the routing matrix. Short form: Claude designs, Codex implements, Cursor audits.

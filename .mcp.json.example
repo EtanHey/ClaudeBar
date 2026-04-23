@@ -1,0 +1,25 @@
+{
+  "_note": "Copy to .mcp.json, fill in EXA_API_KEY, and replace /PATH/TO/cmuxlayer with your local checkout path. .mcp.json is gitignored.",
+  "_updated": "2026-04-18",
+  "mcpServers": {
+    "brainlayer": {
+      "command": "socat",
+      "args": ["STDIO", "UNIX-CONNECT:/tmp/brainbar.sock"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "exa": {
+      "command": "npx",
+      "args": ["-y", "exa-mcp-server"],
+      "env": {
+        "EXA_API_KEY": "YOUR_EXA_API_KEY_HERE"
+      }
+    },
+    "cmux": {
+      "command": "bun",
+      "args": ["run", "/PATH/TO/cmuxlayer/src/index.ts"]
+    }
+  }
+}
