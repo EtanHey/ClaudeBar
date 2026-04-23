@@ -267,6 +267,7 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
 
     private func parseClaudeOutput(_ text: String) throws -> UsageSnapshot {
         let clean = renderTerminalOutput(text)
+        let rawText = stripEscapeSequences(text)
 
         // Log both original and normalized output for debugging
         AppLog.probes.debug("Claude /usage raw output (\(text.count) chars):\n\(text)")
@@ -291,13 +292,20 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
 
         // Extract percentages
         let sessionPct = extractPercent(labelSubstring: "Current session", text: clean)
+            ?? extractPercentFromRawStream(labelSubstring: "Current session", text: rawText)
         let weeklyPct = extractPercent(labelSubstring: "Current week (all models)", text: clean)
+            ?? extractPercentFromRawStream(labelSubstring: "Current week (all models)", text: rawText)
         // Check for model-specific quota (Opus or Sonnet)
         let opusPct = extractPercent(labelSubstring: "Current week (Opus)", text: clean)
+            ?? extractPercentFromRawStream(labelSubstring: "Current week (Opus)", text: rawText)
         let sonnetPct = extractPercent(labelSubstrings: [
             "Current week (Sonnet only)",
             "Current week (Sonnet)",
         ], text: clean)
+            ?? extractPercentFromRawStream(labelSubstrings: [
+                "Current week (Sonnet only)",
+                "Current week (Sonnet)",
+            ], text: rawText)
 
         guard let sessionPct else {
             AppLog.probes.error("Claude parse failed: could not find 'Current session' percentage in output")
@@ -496,6 +504,26 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
         terminalRenderer.render(text)
     }
 
+    internal func stripEscapeSequences(_ text: String) -> String {
+        var result = text
+        result = result.replacingOccurrences(
+            of: "\\e\\].*?(?:\\e\\\\|\\u{07})",
+            with: "",
+            options: .regularExpression
+        )
+        result = result.replacingOccurrences(
+            of: "\\x1b\\].*?(?:\\x1b\\\\|\\x07)",
+            with: "",
+            options: .regularExpression
+        )
+        result = result.replacingOccurrences(
+            of: "\\x1b\\[[0-9;?]*[ -/]*[@-~]",
+            with: "",
+            options: .regularExpression
+        )
+        return result
+    }
+
     internal func extractPercent(labelSubstring: String, text: String) -> Int? {
         let lines = text.components(separatedBy: .newlines)
         let label = labelSubstring.lowercased()
@@ -511,9 +539,38 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
         return nil
     }
 
+    internal func extractPercentFromRawStream(labelSubstring: String, text: String) -> Int? {
+        let lines = text.components(separatedBy: .newlines)
+        let normalizedLabel = normalizeLabelSearchText(labelSubstring)
+
+        for (idx, line) in lines.enumerated() {
+            let normalizedLine = normalizeLabelSearchText(line)
+            guard rawPercentLabelMatches(normalizedLine, expected: normalizedLabel) else {
+                continue
+            }
+
+            let window = lines.dropFirst(idx).prefix(6)
+            for candidate in window {
+                if let pct = percentFromLine(candidate) {
+                    return pct
+                }
+            }
+        }
+        return nil
+    }
+
     internal func extractPercent(labelSubstrings: [String], text: String) -> Int? {
         for label in labelSubstrings {
             if let value = extractPercent(labelSubstring: label, text: text) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    internal func extractPercentFromRawStream(labelSubstrings: [String], text: String) -> Int? {
+        for label in labelSubstrings {
+            if let value = extractPercentFromRawStream(labelSubstring: label, text: text) {
                 return value
             }
         }
@@ -535,6 +592,18 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
         let rawVal = Int(line[valRange]) ?? 0
         let isUsed = line[kindRange].lowercased().contains("used")
         return isUsed ? max(0, 100 - rawVal) : rawVal
+    }
+
+    internal func normalizeLabelSearchText(_ text: String) -> String {
+        text.lowercased().filter(\.isLetterOrNumber)
+    }
+
+    internal func rawPercentLabelMatches(_ normalizedLine: String, expected: String) -> Bool {
+        if expected == "currentsession" {
+            return normalizedLine.hasPrefix("curr") && normalizedLine.contains("session")
+        }
+
+        return normalizedLine.contains(expected)
     }
 
     internal func extractReset(labelSubstring: String, text: String) -> String? {

@@ -1,0 +1,65 @@
+7[r8[?25h[?25l[?2004h[?1004h[?2031h[>0q[?2026$p[c]0;✳ Claude Code[1C▐▛███▜▌[3CClaude[1CCode[1Cv2.1.118
+▝▜█████▛▘[2COpus[1C4.7[1C(1M[1Ccontext)[1Cwith[1Cxhigh[1Ceffort[1C·[1CClaude[1CMax
+[2C▘▘[1C▝▝[4C~/Library/Application[1CSupport/ClaudeBar/Probe
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯ [7m [27m
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[150C0[1Ctokens
+[2C⏵⏵[1Cauto[1Cmode[1Con[1C(shift+tab[1Cto[1Ccycle)[103C◉[1Cxhigh[1C·[1C/effort
+[2C[4A[2D[4B[5A❯ /usage                                                                                                                                                        [1B   [3C[2BStatus[3CConfig[3CUsage[3CStats[116C [1C      [2C[1B  [1C    [1C    [1C  [1C          [1C  [1C      [103C [1C     [1C [1C       
+[2CSession
+[2CTotal[1Ccost:[12C$0.0000
+[2CTotal[1Cduration[1C(API):[2C0s
+[2CTotal[1Cduration[1C(wall):[1C1s
+[2CTotal[1Ccode[1Cchanges:[4C0[1Clines[1Cadded,[1C0[1Clines[1Cremoved
+[2CUsage:[17C0[1Cinput,[1C0[1Coutput,[1C0[1Ccache[1Cread,[1C0[1Ccache[1Cwrite
+
+[2CLoading[1Cusage[1Cdata…
+
+[2CEsc[1Cto[1Ccancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[21C[32A[21D[32B[35A [2Cremote-control[1Cis[1Cactive[1C·[1CCode[1Cin[1CCLI[1Cor[1Cat[1Chttps://claude.ai/code/session_01RU2c7QRXZdtBvGqizdDox9[2B❯ /usage                                                                                                                                                        [3C[1B      [3C      [3C     [3C     [1B────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────[2C[1B Status[3CConfig[3CUsage[3CStats[2C[1B     [1C     [12C       [2C[1BSession       [1C      [2C  [8C[1Bcost:   [1C       [1C$0.0000[8C[1Bduration (API):[3Cs     [1C      [1C [1C     [1C       [2C[1BTotal duration[1C(wall):[1C1s      [1C [1C       [1C [1C     [1C     [1C [1C     [1C     [2C[1BTotal[1Ccode[1Cchanges:[4C0[1Clines[1Cadded,[1C0[1Clines[1Cremoved[2C[1BUs[1Cge: [1C     [1C     [4C0[1Cinput,[1C0[1Coutput,[1C0[1Ccache[1Cread,[1C0[1Ccache[1Cwrite[2C[2BLoading usage[1Cdata…[2C[2BEsc[1Cto[1Ccancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[21C[32A[21D[32B[2C[23ACurre[1Ct[1Csession    [2C[1B██████▌[44C13%[1Cused[2C[1BRese[1Cs[1C10:10pm[1C(Asia/Jerusalem)[2C[2BCurrent[1Cweek[1C(all[1Cmodels)[2C[1B███████████████████████████████████████▌[11C79%[1Cused[2C[1BResets[1C4pm[1C(Asia/Jerusalem)[2C[2BCurrent[1Cweek[1C(Sonnet[1Conly)[53C[1B0%[1Cused[2C[1BResets[1CApr[1C24[1Cat[1C6pm[1C(Asia/Jerusalem)[2C[2BWhat's[1Ccontributing[1Cto[1Cyour[1Climits[1Cusage?[2C[1BApproximate,[1Cbased[1Con[1Clocal[1Csessions[1Con[1Cthis[1Cmachine[1C—[1Cdoes[1Cnot[1Cinclude[1Cother[1Cdevices[1Cor[1Cclaude.ai[2C[2BScanning[1Clocal[1Csessions…[2C[2BExtra[1Cusage[2C[1B██████████████████████████████████████████████████[1C100%[1Cused[2C[1B$60.95[1C/[1C$50.00[1Cspent[1C·[1CResets[1CMay[1C1[1C(Asia/Jerusalem)[2C[2BEsc[1Cto[1Ccancel
+
+[21C[32A[21D[32B[2C[30ATotal cost:[12C$0.0000[8C[1Bduration[1C(API):[2C0s     [18C[1Bwall):[1C1[8C[1Bcode changes:   [1C0 lines[1Cadded,[1C0[1Clines[1Cremoved[2C[1BUsage:    [1C        [6Cinput, 0 output, 0 cache r[1Cad,[1C0[1Ccache[1Cwrite[2C[1BCurr[1Cnt[1Csession[8C [1C      [1C [1C       [1C [1C     [1C     [1C [1C     [1C     [2C[1BResets[1C10:10pm[1C(Asia/Jerusalem)[2C[1B       [1C       [2C[1BCurrent[1Cweek[1C(all[1Cmodels)[26C   [1C    [9C[1B4pm (Asia/Jerusalem)    [16C[2BSonnet only)[2C[1BResets Apr 24 at 6pm (Asia/Jerusalem)   [11C   [1C    [2C[1B      [1C   [1C                [2C[1BApproximate,[1Cbased[1Con[1Clocal[1Csessions[1Con[1Cthis[1Cmachine[1C—[1Cdoes[1Cnot[1Cinclude[1Cother[1Cdevices[1Cor[1Cclaude.ai[2C[1B       [1C    [1C       [1C     [2C[1BLast[1C24h[1C·[1Cthese[1Care[1Cindependent[1Ccharacteristics[1Cof yo[1Cr usage,[1Cnot[1Ca[1Cbreakdown[2C[1B      [1C   [1C  [1C  [1C   [1C                [2C[1B7Longer[1Csessions[1Care[1Cmore[1Cexpensive[1Ceven[1Cwhen[1Ccached.[1C/compact[1Cmid-task,[1C/clear[2C[1B when switch[1Cng to new[1Ctasks.     [1C      [2C[1B72% [1Cf your us[1Cg[1C came from[2Cubage[1Ct-heavy [1Cessions [1C [1C    [1C   [1C       [1C     [1C       [1C  [1C         [2C[2B        [1C     [1C         [2C[1B2All[1Csessions[1Cshare[1Cone[1Climit.[1CIf[1Cyou[1Cdon't[1Cneed[1Cthem[1Call[1Cat[1Conce,[1Cqueueing[1Cuses[2C[1B  it more [1Cvenly.[2C[1Bd to day · w to week                              [1C    [1C    [2C[1BExtra usage    [1C     [1C [1C      [1C   [1C [1C                [2C[1B$60.95[1C/[1C$50.00[1Cspent[1C·[1CResets[1CMay[1C1[1C(Asia/Jerusalem)0%[1Cused[2C[1B   [1C  [1C      [2C[1BEsc[1Cto[1Ccancel
+[21C[32A
