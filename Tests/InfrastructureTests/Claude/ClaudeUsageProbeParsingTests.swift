@@ -419,6 +419,8 @@ struct ClaudeUsageProbeParsingTests {
     \u{1B}[?2026l
     """
 
+    static let activeSessionStatsTabRawOutput = loadFixture(named: "active-session-stats-tab.raw")
+
     @Test
     func `parses real CLI output with Settings header`() throws {
         // When
@@ -444,6 +446,48 @@ struct ClaudeUsageProbeParsingTests {
         #expect(snapshot.sessionQuota?.percentRemaining == 99) // 1% used = 99% left
         #expect(snapshot.weeklyQuota != nil)
         #expect(snapshot.weeklyQuota?.percentRemaining == 84) // 16% used = 84% left
+    }
+
+    @Test
+    func `renderTerminalOutput shows mixed final screen when active session banner is present`() throws {
+        // Given
+        let probe = ClaudeUsageProbe()
+
+        // When
+        let rendered = probe.renderTerminalOutput(Self.activeSessionStatsTabRawOutput)
+
+        // Then
+        #expect(rendered.contains("remote-control is active"))
+        #expect(rendered.contains("Current session"))
+        #expect(rendered.contains("Current week (all models)"))
+        #expect(rendered.contains("Current week (Sonnet only)"))
+        #expect(rendered.contains("Total cost:"))
+        #expect(rendered.contains("Longer sessions are more expensive"))
+        #expect(!rendered.contains("13% used"))
+        #expect(!rendered.contains("79% used"))
+    }
+
+    @Test
+    func `extractPercentFromRawStream recovers usage percentages before stats redraw overwrites screen`() throws {
+        // Given
+        let probe = ClaudeUsageProbe()
+        let raw = probe.stripEscapeSequences(Self.activeSessionStatsTabRawOutput)
+
+        // When / Then
+        #expect(probe.extractPercentFromRawStream(labelSubstring: "Current session", text: raw) == 87)
+        #expect(probe.extractPercentFromRawStream(labelSubstring: "Current week (all models)", text: raw) == 21)
+        #expect(probe.extractPercentFromRawStream(labelSubstrings: ["Current week (Sonnet only)", "Current week (Sonnet)"], text: raw) == 100)
+    }
+
+    @Test
+    func `parses usage output when active claude code session adds stats tab`() throws {
+        // When
+        let snapshot = try simulateParse(text: Self.activeSessionStatsTabRawOutput)
+
+        // Then
+        #expect(snapshot.sessionQuota?.percentRemaining == 87) // 13% used
+        #expect(snapshot.weeklyQuota?.percentRemaining == 21) // 79% used
+        #expect(snapshot.quota(for: .modelSpecific("sonnet"))?.percentRemaining == 100) // 0% used
     }
 
     @Test
@@ -918,5 +962,13 @@ struct ClaudeUsageProbeParsingTests {
 
     private func simulateParse(text: String) throws -> UsageSnapshot {
         try ClaudeUsageProbe.parse(text)
+    }
+
+    private static func loadFixture(named name: String) -> String {
+        let fixturesDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures", isDirectory: true)
+        let fixtureURL = fixturesDirectory.appendingPathComponent(name)
+        return try! String(contentsOf: fixtureURL, encoding: .utf8)
     }
 }
