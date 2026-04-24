@@ -55,7 +55,8 @@ struct ClaudeBarApp: App {
             CodexProvider(
                 rpcProbe: CodexUsageProbe(),
                 apiProbe: CodexAPIUsageProbe(),
-                settingsRepository: settingsRepository
+                settingsRepository: settingsRepository,
+                localAnalyticsAnalyzer: CodexLocalAnalyticsAnalyzer()
             ),
             GeminiProvider(probe: GeminiUsageProbe(), settingsRepository: settingsRepository),
             AntigravityProvider(probe: AntigravityUsageProbe(), settingsRepository: settingsRepository),

@@ -29,6 +29,9 @@ public struct UsageSnapshot: Sendable, Equatable {
     /// Daily usage report from local session JSONL analysis (e.g., Claude Code)
     public let dailyUsageReport: DailyUsageReport?
 
+    /// Local Codex analytics derived from `@ccusage/codex`.
+    public let codexLocalAnalyticsReport: CodexLocalAnalyticsReport?
+
     /// Generic metrics from extension probes
     public let extensionMetrics: [ExtensionMetric]?
 
@@ -45,6 +48,7 @@ public struct UsageSnapshot: Sendable, Equatable {
         costUsage: CostUsage? = nil,
         bedrockUsage: BedrockUsageSummary? = nil,
         dailyUsageReport: DailyUsageReport? = nil,
+        codexLocalAnalyticsReport: CodexLocalAnalyticsReport? = nil,
         extensionMetrics: [ExtensionMetric]? = nil
     ) {
         self.providerId = providerId
@@ -57,6 +61,7 @@ public struct UsageSnapshot: Sendable, Equatable {
         self.costUsage = costUsage
         self.bedrockUsage = bedrockUsage
         self.dailyUsageReport = dailyUsageReport
+        self.codexLocalAnalyticsReport = codexLocalAnalyticsReport
         self.extensionMetrics = extensionMetrics
     }
 

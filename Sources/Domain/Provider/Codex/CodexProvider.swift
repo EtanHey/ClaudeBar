@@ -32,6 +32,7 @@ public final class CodexProvider: AIProvider, @unchecked Sendable {
     public private(set) var isSyncing: Bool = false
     public private(set) var snapshot: UsageSnapshot?
     public private(set) var lastError: Error?
+    private var analyticsRefreshTask: Task<Void, Never>?
 
     // MARK: - Probe Mode
 
@@ -60,6 +61,7 @@ public final class CodexProvider: AIProvider, @unchecked Sendable {
 
     /// The settings repository for persisting provider settings
     private let settingsRepository: any ProviderSettingsRepository
+    private let localAnalyticsAnalyzer: (any CodexLocalAnalyticsAnalyzing)?
 
     /// Returns the active probe based on current mode
     private var activeProbe: any UsageProbe {
@@ -78,10 +80,15 @@ public final class CodexProvider: AIProvider, @unchecked Sendable {
     /// - Parameters:
     ///   - probe: The RPC probe to use for fetching usage data
     ///   - settingsRepository: The repository for persisting settings
-    public init(probe: any UsageProbe, settingsRepository: any ProviderSettingsRepository) {
+    public init(
+        probe: any UsageProbe,
+        settingsRepository: any ProviderSettingsRepository,
+        localAnalyticsAnalyzer: (any CodexLocalAnalyticsAnalyzing)? = nil
+    ) {
         self.rpcProbe = probe
         self.apiProbe = nil
         self.settingsRepository = settingsRepository
+        self.localAnalyticsAnalyzer = localAnalyticsAnalyzer
         self.isEnabled = settingsRepository.isEnabled(forProvider: "codex")
     }
 
@@ -93,11 +100,13 @@ public final class CodexProvider: AIProvider, @unchecked Sendable {
     public init(
         rpcProbe: any UsageProbe,
         apiProbe: any UsageProbe,
-        settingsRepository: any CodexSettingsRepository
+        settingsRepository: any CodexSettingsRepository,
+        localAnalyticsAnalyzer: (any CodexLocalAnalyticsAnalyzing)? = nil
     ) {
         self.rpcProbe = rpcProbe
         self.apiProbe = apiProbe
         self.settingsRepository = settingsRepository
+        self.localAnalyticsAnalyzer = localAnalyticsAnalyzer
         self.isEnabled = settingsRepository.isEnabled(forProvider: "codex")
     }
 
@@ -113,9 +122,12 @@ public final class CodexProvider: AIProvider, @unchecked Sendable {
         defer { isSyncing = false }
 
         do {
-            let newSnapshot = try await activeProbe.probe()
+            let liveSnapshot = try await activeProbe.probe()
+            let cachedReport = await localAnalyticsAnalyzer?.cachedReport()
+            let newSnapshot = attachLocalAnalytics(to: liveSnapshot, report: cachedReport)
             snapshot = newSnapshot
             lastError = nil
+            scheduleLocalAnalyticsRefresh()
             return newSnapshot
         } catch {
             lastError = error
@@ -126,5 +138,46 @@ public final class CodexProvider: AIProvider, @unchecked Sendable {
     /// Whether API mode is available (API probe was provided)
     public var supportsApiMode: Bool {
         apiProbe != nil
+    }
+
+    private func attachLocalAnalytics(
+        to snapshot: UsageSnapshot,
+        report: CodexLocalAnalyticsReport?
+    ) -> UsageSnapshot {
+        UsageSnapshot(
+            providerId: snapshot.providerId,
+            quotas: snapshot.quotas,
+            capturedAt: snapshot.capturedAt,
+            accountEmail: snapshot.accountEmail,
+            accountOrganization: snapshot.accountOrganization,
+            loginMethod: snapshot.loginMethod,
+            accountTier: snapshot.accountTier,
+            costUsage: snapshot.costUsage,
+            bedrockUsage: snapshot.bedrockUsage,
+            dailyUsageReport: snapshot.dailyUsageReport,
+            codexLocalAnalyticsReport: report?.hasContent == true ? report : nil,
+            extensionMetrics: snapshot.extensionMetrics
+        )
+    }
+
+    private func scheduleLocalAnalyticsRefresh() {
+        guard let localAnalyticsAnalyzer else { return }
+
+        analyticsRefreshTask?.cancel()
+        analyticsRefreshTask = Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                let refreshedReport = try await localAnalyticsAnalyzer.refresh(policy: .ifNeeded)
+                guard !Task.isCancelled else { return }
+
+                await MainActor.run {
+                    guard let currentSnapshot = self.snapshot else { return }
+                    self.snapshot = self.attachLocalAnalytics(to: currentSnapshot, report: refreshedReport)
+                }
+            } catch {
+                // Keep the last cached analytics attached to the current snapshot.
+            }
+        }
     }
 }

@@ -14,5 +14,5 @@ xcuserdata/
 build/
 .serena/
 
-# Local MCP config — contains API keys. Use .mcp.json.example as template.
-.mcp.json
+# Codex CLI local derived cache (Xcode build artifacts)
+.codex-derived/
