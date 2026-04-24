@@ -352,6 +352,225 @@ struct ClaudeProviderTests {
     }
 
     @Test
+    func `refreshing non active account stores account specific error`() async {
+        let settings = FakeMultiAccountClaudeSettings(activeAccountId: ProviderAccount.defaultAccountId)
+        let primaryProbe = MockUsageProbe()
+        given(primaryProbe).probe().willReturn(
+            UsageSnapshot(
+                providerId: "claude",
+                quotas: [UsageQuota(percentRemaining: 80, quotaType: .session, providerId: "claude")],
+                capturedAt: Date(),
+                accountEmail: "primary@example.com"
+            )
+        )
+
+        let expectedError = ProbeError.timeout
+        let secondaryProbe = ScriptedUsageProbe(results: [.failure(expectedError)])
+
+        let claude = ClaudeProvider(
+            accounts: [
+                ClaudeAccountDefinition(
+                    account: ProviderAccount(
+                        accountId: ProviderAccount.defaultAccountId,
+                        providerId: "claude",
+                        label: "Default",
+                        email: "primary@example.com"
+                    ),
+                    configRootPath: "/Users/test/.claude",
+                    cliProbe: primaryProbe
+                ),
+                ClaudeAccountDefinition(
+                    account: ProviderAccount(
+                        accountId: "secondary",
+                        providerId: "claude",
+                        label: "Secondary",
+                        email: "secondary@example.com"
+                    ),
+                    configRootPath: "/Users/test/.claude-secondary",
+                    cliProbe: secondaryProbe
+                ),
+            ],
+            settingsRepository: settings
+        )
+
+        do {
+            _ = try await claude.refreshAccount("secondary")
+        } catch {
+            // Expected
+        }
+
+        #expect(claude.accountErrors["secondary"]?.localizedDescription == expectedError.localizedDescription)
+        #expect(claude.accountError(for: "secondary")?.localizedDescription == expectedError.localizedDescription)
+        #expect(claude.lastError == nil)
+    }
+
+    @Test
+    func `refreshing non active account successfully clears prior account error`() async throws {
+        let settings = FakeMultiAccountClaudeSettings(activeAccountId: ProviderAccount.defaultAccountId)
+        let primaryProbe = MockUsageProbe()
+        given(primaryProbe).probe().willReturn(
+            UsageSnapshot(
+                providerId: "claude",
+                quotas: [UsageQuota(percentRemaining: 80, quotaType: .session, providerId: "claude")],
+                capturedAt: Date(),
+                accountEmail: "primary@example.com"
+            )
+        )
+
+        let expectedSnapshot = UsageSnapshot(
+            providerId: "claude",
+            quotas: [UsageQuota(percentRemaining: 55, quotaType: .session, providerId: "claude")],
+            capturedAt: Date(),
+            accountEmail: "secondary@example.com"
+        )
+        let secondaryProbe = ScriptedUsageProbe(results: [
+            .failure(ProbeError.timeout),
+            .success(expectedSnapshot),
+        ])
+
+        let claude = ClaudeProvider(
+            accounts: [
+                ClaudeAccountDefinition(
+                    account: ProviderAccount(
+                        accountId: ProviderAccount.defaultAccountId,
+                        providerId: "claude",
+                        label: "Default",
+                        email: "primary@example.com"
+                    ),
+                    configRootPath: "/Users/test/.claude",
+                    cliProbe: primaryProbe
+                ),
+                ClaudeAccountDefinition(
+                    account: ProviderAccount(
+                        accountId: "secondary",
+                        providerId: "claude",
+                        label: "Secondary",
+                        email: "secondary@example.com"
+                    ),
+                    configRootPath: "/Users/test/.claude-secondary",
+                    cliProbe: secondaryProbe
+                ),
+            ],
+            settingsRepository: settings
+        )
+
+        do {
+            _ = try await claude.refreshAccount("secondary")
+        } catch {
+            // Expected on first attempt
+        }
+
+        #expect(claude.accountErrors["secondary"] != nil)
+
+        let snapshot = try await claude.refreshAccount("secondary")
+
+        #expect(snapshot.accountEmail == "secondary@example.com")
+        #expect(claude.accountErrors["secondary"] == nil)
+        #expect(claude.accountError(for: "secondary") == nil)
+    }
+
+    @Test
+    func `refreshing active account still stores lastError for back compat`() async {
+        let settings = FakeMultiAccountClaudeSettings(activeAccountId: "secondary")
+        let primaryProbe = MockUsageProbe()
+        given(primaryProbe).probe().willReturn(
+            UsageSnapshot(
+                providerId: "claude",
+                quotas: [UsageQuota(percentRemaining: 80, quotaType: .session, providerId: "claude")],
+                capturedAt: Date(),
+                accountEmail: "primary@example.com"
+            )
+        )
+
+        let expectedError = ProbeError.executionFailed("secondary probe failed")
+        let secondaryProbe = ScriptedUsageProbe(results: [.failure(expectedError)])
+
+        let claude = ClaudeProvider(
+            accounts: [
+                ClaudeAccountDefinition(
+                    account: ProviderAccount(
+                        accountId: ProviderAccount.defaultAccountId,
+                        providerId: "claude",
+                        label: "Default",
+                        email: "primary@example.com"
+                    ),
+                    configRootPath: "/Users/test/.claude",
+                    cliProbe: primaryProbe
+                ),
+                ClaudeAccountDefinition(
+                    account: ProviderAccount(
+                        accountId: "secondary",
+                        providerId: "claude",
+                        label: "Secondary",
+                        email: "secondary@example.com"
+                    ),
+                    configRootPath: "/Users/test/.claude-secondary",
+                    cliProbe: secondaryProbe
+                ),
+            ],
+            settingsRepository: settings
+        )
+
+        do {
+            _ = try await claude.refreshAccount("secondary")
+        } catch {
+            // Expected
+        }
+
+        #expect(claude.lastError?.localizedDescription == expectedError.localizedDescription)
+        #expect(claude.accountErrors["secondary"]?.localizedDescription == expectedError.localizedDescription)
+    }
+
+    @Test
+    func `refreshAllAccounts records inactive account errors while keeping active account healthy`() async {
+        let settings = FakeMultiAccountClaudeSettings(activeAccountId: ProviderAccount.defaultAccountId)
+        let primaryProbe = MockUsageProbe()
+        given(primaryProbe).probe().willReturn(
+            UsageSnapshot(
+                providerId: "claude",
+                quotas: [UsageQuota(percentRemaining: 80, quotaType: .session, providerId: "claude")],
+                capturedAt: Date(),
+                accountEmail: "primary@example.com"
+            )
+        )
+
+        let expectedError = ProbeError.timeout
+        let secondaryProbe = ScriptedUsageProbe(results: [.failure(expectedError)])
+
+        let claude = ClaudeProvider(
+            accounts: [
+                ClaudeAccountDefinition(
+                    account: ProviderAccount(
+                        accountId: ProviderAccount.defaultAccountId,
+                        providerId: "claude",
+                        label: "Default",
+                        email: "primary@example.com"
+                    ),
+                    configRootPath: "/Users/test/.claude",
+                    cliProbe: primaryProbe
+                ),
+                ClaudeAccountDefinition(
+                    account: ProviderAccount(
+                        accountId: "secondary",
+                        providerId: "claude",
+                        label: "Secondary",
+                        email: "secondary@example.com"
+                    ),
+                    configRootPath: "/Users/test/.claude-secondary",
+                    cliProbe: secondaryProbe
+                ),
+            ],
+            settingsRepository: settings
+        )
+
+        await claude.refreshAllAccounts()
+
+        #expect(claude.snapshot?.accountEmail == "primary@example.com")
+        #expect(claude.accountErrors["secondary"]?.localizedDescription == expectedError.localizedDescription)
+        #expect(claude.lastError == nil)
+    }
+
+    @Test
     func `setting primary account updates primary account and invokes callback`() {
         let settings = FakeMultiAccountClaudeSettings()
         let primaryProbe = MockUsageProbe()
@@ -487,6 +706,27 @@ private struct DelayedUsageProbe: UsageProbe, @unchecked Sendable {
     func probe() async throws -> UsageSnapshot {
         try await Task.sleep(nanoseconds: delayNanoseconds)
         return snapshot
+    }
+
+    func isAvailable() async -> Bool {
+        true
+    }
+}
+
+private actor ScriptedUsageProbe: UsageProbe {
+    private var results: [Result<UsageSnapshot, Error>]
+
+    init(results: [Result<UsageSnapshot, Error>]) {
+        self.results = results
+    }
+
+    func probe() async throws -> UsageSnapshot {
+        guard !results.isEmpty else {
+            throw ProbeError.executionFailed("No scripted probe result available")
+        }
+
+        let next = results.removeFirst()
+        return try next.get()
     }
 
     func isAvailable() async -> Bool {
