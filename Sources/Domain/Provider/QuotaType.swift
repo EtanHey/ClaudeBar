@@ -20,9 +20,9 @@ public enum QuotaType: Sendable, Equatable, Hashable {
         case .weekly:
             "Weekly"
         case .modelSpecific(let modelName):
-            modelName.capitalized
+            Self.preferredDisplayName(for: modelName)
         case .timeLimit(let name):
-            name.capitalized
+            Self.preferredDisplayName(for: name)
         }
     }
 
@@ -48,6 +48,10 @@ public enum QuotaType: Sendable, Equatable, Hashable {
         default:
             nil
         }
+    }
+
+    private static func preferredDisplayName(for rawValue: String) -> String {
+        rawValue == rawValue.lowercased() ? rawValue.capitalized : rawValue
     }
 }
 

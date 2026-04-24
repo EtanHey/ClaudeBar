@@ -24,6 +24,8 @@ struct MenuContentView: View {
     @State private var showSharePass = false
     @State private var settings = AppSettings.shared
     @State private var hasRequestedNotificationPermission = false
+    @GestureState private var claudeAccountDragOffset: CGFloat = 0
+    @Namespace private var claudeAccountIndicatorNamespace
 
     /// The currently selected provider ID (from monitor, which is @Observable)
     private var selectedProviderId: String {
@@ -132,7 +134,7 @@ struct MenuContentView: View {
             if settings.overviewModeEnabled {
                 await refreshAllEnabled()
             } else {
-                await refresh(providerId: selectedProviderId)
+                await refreshIfNeeded(providerId: selectedProviderId)
             }
 
             // Check for updates when menu opens (no UI unless update found)
@@ -145,7 +147,7 @@ struct MenuContentView: View {
         .onChange(of: selectedProviderId) { _, newProviderId in
             // Refresh when user switches provider
             Task {
-                await refresh(providerId: newProviderId)
+                await refreshIfNeeded(providerId: newProviderId)
             }
         }
         .onChange(of: settings.backgroundSyncEnabled) { _, enabled in
@@ -391,6 +393,9 @@ struct MenuContentView: View {
             } else {
                 overviewContent(providers: providers)
             }
+        } else if let claudeProvider = selectedProvider as? ClaudeProvider,
+                  claudeProvider.accounts.count > 1 {
+            claudeAccountContent(provider: claudeProvider)
         } else if let provider = selectedProvider, let snapshot = provider.snapshot {
             VStack(spacing: 12) {
                 if let displayName = snapshot.accountEmail ?? snapshot.accountOrganization {
@@ -461,6 +466,150 @@ struct MenuContentView: View {
         .padding(.horizontal, 4)
     }
 
+    private func claudeAccountContent(provider: ClaudeProvider) -> some View {
+        let pageWidth: CGFloat = 368
+        let pageSpacing: CGFloat = 12
+        let activeIndex = provider.accounts.firstIndex(where: {
+            $0.accountId == provider.activeAccount.accountId
+        }) ?? 0
+
+        return VStack(spacing: 12) {
+            HStack(alignment: .center, spacing: 8) {
+                AccountPickerView(provider: provider) { accountId in
+                    guard provider.switchAccount(to: accountId),
+                          provider.accountSnapshots[accountId] == nil else {
+                        return
+                    }
+                    Task {
+                        try? await provider.refreshAccount(accountId)
+                    }
+                }
+
+                if provider.primaryAccount?.accountId == provider.activeAccount.accountId {
+                    Text("Primary")
+                        .badge(theme.accentPrimary)
+                } else {
+                    Button {
+                        _ = provider.setPrimaryAccount(to: provider.activeAccount.accountId)
+                    } label: {
+                        Text("Make Primary")
+                            .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                            .foregroundStyle(theme.accentPrimary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(
+                                Capsule()
+                                    .stroke(theme.accentPrimary.opacity(0.5), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            HStack(spacing: pageSpacing) {
+                ForEach(provider.accounts, id: \.id) { account in
+                    claudeAccountPage(provider: provider, account: account)
+                        .frame(width: pageWidth)
+                }
+            }
+            .offset(x: (-CGFloat(activeIndex) * (pageWidth + pageSpacing)) + claudeAccountDragOffset)
+            .frame(width: pageWidth, alignment: .leading)
+            .frame(minHeight: 220)
+            .clipped()
+            .contentShape(Rectangle())
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 10)
+                    .updating($claudeAccountDragOffset) { value, state, _ in
+                        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                        state = value.translation.width * 0.92
+                    }
+                    .onEnded { value in
+                        handleClaudeAccountSwipe(
+                            provider: provider,
+                            translationWidth: value.translation.width,
+                            predictedTranslationWidth: value.predictedEndTranslation.width
+                        )
+                    }
+            )
+            .animation(.spring(response: 0.32, dampingFraction: 0.86), value: provider.activeAccount.accountId)
+
+            claudeAccountPageIndicators(provider: provider)
+        }
+        .opacity(animateIn ? 1 : 0)
+        .animation(.easeOut(duration: 0.5).delay(0.2), value: animateIn)
+    }
+
+    @ViewBuilder
+    private func claudeAccountPage(provider: ClaudeProvider, account: ProviderAccount) -> some View {
+        let snapshot = provider.accountSnapshots[account.accountId]
+            ?? (account.accountId == provider.activeAccount.accountId ? provider.snapshot : nil)
+        let accountError = provider.accountError(for: account.accountId)
+
+        VStack(spacing: 12) {
+            if let snapshot {
+                let displayName = account.label
+                accountCard(displayName: displayName, snapshot: snapshot)
+
+                if let email = account.email, email != displayName {
+                    Text(email)
+                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                        .foregroundStyle(theme.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 4)
+                }
+
+                statsGrid(snapshot: snapshot)
+            } else if let accountError {
+                claudeAccountErrorState(account: account, error: accountError)
+            } else if provider.isSyncing && account.accountId == provider.activeAccount.accountId {
+                loadingState
+            } else {
+                VStack(spacing: 10) {
+                    Text(account.label)
+                        .font(.system(size: 13, weight: .bold, design: theme.fontDesign))
+                        .foregroundStyle(theme.textPrimary)
+
+                    if let email = account.email {
+                        Text(email)
+                            .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                            .foregroundStyle(theme.textTertiary)
+                    }
+
+                    Text("Refresh this account to load usage data.")
+                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                        .foregroundStyle(theme.textTertiary)
+                }
+                .frame(maxWidth: .infinity)
+                .glassCard()
+            }
+        }
+    }
+
+    private func claudeAccountErrorState(account: ProviderAccount, error: any Error) -> some View {
+        VStack(spacing: 10) {
+            Text(account.label)
+                .font(.system(size: 13, weight: .bold, design: theme.fontDesign))
+                .foregroundStyle(theme.textPrimary)
+
+            if let email = account.email {
+                Text(email)
+                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                    .foregroundStyle(theme.textTertiary)
+            }
+
+            Label("Refresh failed", systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
+                .foregroundStyle(theme.statusWarning)
+
+            Text(error.localizedDescription)
+                .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                .foregroundStyle(theme.textTertiary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .glassCard()
+    }
+
     private func compactErrorState(provider: any AIProvider) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -475,6 +624,72 @@ struct MenuContentView: View {
             Spacer()
         }
         .padding(.vertical, 4)
+    }
+
+    private func claudeAccountPageIndicators(provider: ClaudeProvider) -> some View {
+        HStack(spacing: 6) {
+            ForEach(provider.accounts, id: \.id) { account in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(theme.glassBorder.opacity(0.45))
+                        .frame(width: 6, height: 6)
+
+                    if account.accountId == provider.activeAccount.accountId {
+                        Capsule()
+                            .fill(theme.accentPrimary)
+                            .frame(width: 18, height: 6)
+                            .matchedGeometryEffect(
+                                id: "claudeAccountIndicator",
+                                in: claudeAccountIndicatorNamespace
+                            )
+                    }
+                }
+                .frame(
+                    width: account.accountId == provider.activeAccount.accountId ? 18 : 6,
+                    height: 6,
+                    alignment: .leading
+                )
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: provider.activeAccount.accountId)
+    }
+
+    private func handleClaudeAccountSwipe(
+        provider: ClaudeProvider,
+        translationWidth: CGFloat,
+        predictedTranslationWidth: CGFloat
+    ) {
+        let threshold: CGFloat = 34
+        let effectiveTranslation = abs(predictedTranslationWidth) > abs(translationWidth)
+            ? predictedTranslationWidth
+            : translationWidth
+
+        guard abs(effectiveTranslation) >= threshold,
+              let currentIndex = provider.accounts.firstIndex(where: {
+                  $0.accountId == provider.activeAccount.accountId
+              }) else {
+            return
+        }
+
+        let targetIndex: Int
+        if effectiveTranslation < 0 {
+            targetIndex = min(currentIndex + 1, provider.accounts.count - 1)
+        } else {
+            targetIndex = max(currentIndex - 1, 0)
+        }
+
+        guard targetIndex != currentIndex else { return }
+
+        let targetAccount = provider.accounts[targetIndex]
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+            guard provider.switchAccount(to: targetAccount.accountId) else { return }
+        }
+
+        guard provider.accountSnapshots[targetAccount.accountId] == nil else { return }
+        Task {
+            try? await provider.refreshAccount(targetAccount.accountId)
+        }
     }
 
 
@@ -764,6 +979,19 @@ struct MenuContentView: View {
                 }
             }
         }
+    }
+
+    /// Refresh a specific provider only when the current snapshot is missing or stale.
+    private func refreshIfNeeded(providerId: String) async {
+        guard let provider = monitor.provider(for: providerId) else {
+            return
+        }
+
+        if let snapshot = provider.snapshot, !snapshot.isStale {
+            return
+        }
+
+        await refresh(providerId: providerId)
     }
 
     /// Refresh a specific provider by ID

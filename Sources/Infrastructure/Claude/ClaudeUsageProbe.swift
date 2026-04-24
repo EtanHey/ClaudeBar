@@ -14,6 +14,7 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
     private let timeout: TimeInterval
     private let cliExecutor: CLIExecutor
     private let terminalRenderer: TerminalRenderer
+    private let claudeConfigURL: URL?
 
     /// Environment variables to strip from the CLI subprocess.
     /// `CLAUDE_CODE_OAUTH_TOKEN` is excluded because setup-tokens only have
@@ -27,13 +28,19 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
         claudeBinary: String = "claude",
         timeout: TimeInterval = 20.0,
         cliExecutor: CLIExecutor? = nil,
-        accountInfoResolver: any AccountInfoResolving = ClaudeAccountInfoResolver()
+        accountInfoResolver: any AccountInfoResolving = ClaudeAccountInfoResolver(),
+        environmentOverrides: [String: String] = [:],
+        claudeConfigURL: URL? = nil
     ) {
         self.claudeBinary = claudeBinary
         self.timeout = timeout
-        self.cliExecutor = cliExecutor ?? DefaultCLIExecutor(environmentExclusions: Self.envExclusions)
+        self.cliExecutor = cliExecutor ?? DefaultCLIExecutor(
+            environmentExclusions: Self.envExclusions,
+            environmentOverrides: environmentOverrides
+        )
         self.terminalRenderer = TerminalRenderer(cols: 160, rows: 50)
         self.accountInfoResolver = accountInfoResolver
+        self.claudeConfigURL = claudeConfigURL
     }
 
     public func isAvailable() async -> Bool {
@@ -954,7 +961,7 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
     internal func writeClaudeTrust(for directory: URL) -> Bool {
         let configDir = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]
             .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true) }
-        let claudeJsonURL = (configDir ?? FileManager.default.homeDirectoryForCurrentUser)
+        let claudeJsonURL = claudeConfigURL ?? (configDir ?? FileManager.default.homeDirectoryForCurrentUser)
             .appendingPathComponent(".claude.json")
 
         guard FileManager.default.fileExists(atPath: claudeJsonURL.path) else {

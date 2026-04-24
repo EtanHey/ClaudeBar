@@ -36,6 +36,12 @@ struct QuotaTypeTests {
         #expect(QuotaType.timeLimit("daily limit").displayName == "Daily Limit")
     }
 
+    @Test
+    func `preformatted quota names preserve existing casing`() {
+        #expect(QuotaType.modelSpecific("GPT-5.3-Codex-Spark").displayName == "GPT-5.3-Codex-Spark")
+        #expect(QuotaType.timeLimit("GPT-5.3-Codex-Spark 5h").displayName == "GPT-5.3-Codex-Spark 5h")
+    }
+
     // MARK: - Duration Tests
 
     @Test

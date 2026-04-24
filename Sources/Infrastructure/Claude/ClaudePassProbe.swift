@@ -28,11 +28,12 @@ public final class ClaudePassProbe: ClaudePassProbing, @unchecked Sendable {
         claudeBinary: String = "claude",
         timeout: TimeInterval = 20.0,
         cliExecutor: CLIExecutor? = nil,
-        clipboardReader: ClipboardReader? = nil
+        clipboardReader: ClipboardReader? = nil,
+        environmentOverrides: [String: String] = [:]
     ) {
         self.claudeBinary = claudeBinary
         self.timeout = timeout
-        self.cliExecutor = cliExecutor ?? DefaultCLIExecutor()
+        self.cliExecutor = cliExecutor ?? DefaultCLIExecutor(environmentOverrides: environmentOverrides)
         self.clipboardReader = clipboardReader ?? SystemClipboardReader()
     }
 

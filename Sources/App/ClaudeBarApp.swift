@@ -51,13 +51,7 @@ struct ClaudeBarApp: App {
         // Each provider manages its own isEnabled state (persisted via ProviderSettingsRepository)
         // Each probe checks isAvailable() for credentials/prerequisites
         let repository = AIProviders(providers: [
-            ClaudeProvider(
-                cliProbe: ClaudeUsageProbe(),
-                apiProbe: ClaudeAPIUsageProbe(),
-                passProbe: ClaudePassProbe(),
-                settingsRepository: settingsRepository,
-                dailyUsageAnalyzer: ClaudeDailyUsageAnalyzer()
-            ),
+            Self.makeClaudeProvider(settingsRepository: settingsRepository),
             CodexProvider(
                 rpcProbe: CodexUsageProbe(),
                 apiProbe: CodexAPIUsageProbe(),
@@ -128,6 +122,68 @@ struct ClaudeBarApp: App {
         // Menu bar apps need the run loop to be active before requesting permissions
 
         AppLog.ui.info("ClaudeBar initialization complete")
+    }
+
+    private static func makeClaudeProvider(settingsRepository: JSONSettingsRepository) -> ClaudeProvider {
+        let appDirectory = ClaudeShellIntegration.defaultAppDirectory()
+        ClaudeShellIntegration.installZshHookIfNeeded(appDirectory: appDirectory)
+
+        let discoveredAccounts = (try? ClaudeAccountDiscovery(
+            labelOverrides: settingsRepository.accounts(forProvider: "claude")
+        ).discoverAccounts()) ?? []
+
+        let shouldUseMultiAccount = discoveredAccounts.count > 1 ||
+            discoveredAccounts.first?.account.isDefault == false
+
+        guard shouldUseMultiAccount else {
+            return ClaudeProvider(
+                cliProbe: ClaudeUsageProbe(),
+                apiProbe: ClaudeAPIUsageProbe(),
+                passProbe: ClaudePassProbe(),
+                settingsRepository: settingsRepository,
+                dailyUsageAnalyzer: ClaudeDailyUsageAnalyzer()
+            )
+        }
+
+        let primaryConfigRoot = ClaudeShellIntegration.activeConfigRoot(appDirectory: appDirectory)
+            ?? ClaudeShellIntegration.defaultConfigRootPath()
+        let primaryAccountId = discoveredAccounts
+            .first { $0.configRootPath == primaryConfigRoot }?
+            .account
+            .accountId
+
+        let definitions = discoveredAccounts.map { discovered in
+            let environmentOverrides = ClaudeCLIEnvironment.overrides(
+                forConfigRootPath: discovered.configRootPath
+            )
+            let metadataURL = URL(fileURLWithPath: discovered.metadataFilePath)
+            let configRootURL = URL(fileURLWithPath: discovered.configRootPath, isDirectory: true)
+
+            return ClaudeAccountDefinition(
+                account: discovered.account,
+                defaultLabel: discovered.defaultLabel,
+                configRootPath: discovered.configRootPath,
+                cliProbe: ClaudeUsageProbe(
+                    accountInfoResolver: ClaudeAccountInfoResolver(configURL: metadataURL),
+                    environmentOverrides: environmentOverrides,
+                    claudeConfigURL: metadataURL
+                ),
+                passProbe: ClaudePassProbe(environmentOverrides: environmentOverrides),
+                dailyUsageAnalyzer: ClaudeDailyUsageAnalyzer(claudeDir: configRootURL)
+            )
+        }
+
+        return ClaudeProvider(
+            accounts: definitions,
+            settingsRepository: settingsRepository,
+            primaryAccountId: primaryAccountId,
+            onPrimaryAccountChange: { definition in
+                ClaudeShellIntegration.setActiveConfigRoot(
+                    definition.configRootPath,
+                    appDirectory: appDirectory
+                )
+            }
+        )
     }
 
     /// App settings for theme

@@ -38,19 +38,23 @@ public struct InteractiveRunner: Sendable {
         /// Use this to prevent env vars like `CLAUDE_CODE_OAUTH_TOKEN` from being
         /// inherited by the subprocess, forcing it to use stored credentials instead.
         public var environmentExclusions: [String]
+        /// Environment variable overrides to inject into the subprocess.
+        public var environmentOverrides: [String: String]
 
         public init(
             timeout: TimeInterval = 20.0,
             workingDirectory: URL? = nil,
             arguments: [String] = [],
             autoResponses: [String: String] = [:],
-            environmentExclusions: [String] = []
+            environmentExclusions: [String] = [],
+            environmentOverrides: [String: String] = [:]
         ) {
             self.timeout = timeout
             self.workingDirectory = workingDirectory
             self.arguments = arguments
             self.autoResponses = autoResponses
             self.environmentExclusions = environmentExclusions
+            self.environmentOverrides = environmentOverrides
         }
     }
 
@@ -211,7 +215,10 @@ public struct InteractiveRunner: Sendable {
         process.standardInput = terminalHandle
         process.standardOutput = terminalHandle
         process.standardError = terminalHandle
-        process.environment = Self.terminalEnvironment(excluding: options.environmentExclusions)
+        process.environment = Self.terminalEnvironment(
+            excluding: options.environmentExclusions,
+            overrides: options.environmentOverrides
+        )
 
         if let workingDirectory = options.workingDirectory {
             process.currentDirectoryURL = workingDirectory
@@ -390,11 +397,17 @@ public struct InteractiveRunner: Sendable {
     /// Ensures CLI tools behave as they would in a normal terminal.
     /// - Parameter excluding: Environment variable keys to remove from the subprocess.
     ///   Use this to prevent tokens like `CLAUDE_CODE_OAUTH_TOKEN` from being inherited.
-    private static func terminalEnvironment(excluding: [String] = []) -> [String: String] {
+    private static func terminalEnvironment(
+        excluding: [String] = [],
+        overrides: [String: String] = [:]
+    ) -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         // Remove excluded keys before setting defaults
         for key in excluding {
             env.removeValue(forKey: key)
+        }
+        for (key, value) in overrides {
+            env[key] = value
         }
         env["PATH"] = ensureCommonPathsIncluded(BinaryLocator.shellPath())
         env["HOME"] = env["HOME"] ?? NSHomeDirectory()
